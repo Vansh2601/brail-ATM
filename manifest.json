@@ -1,0 +1,42 @@
+{
+  "name": "Braille Bank ATM",
+  "short_name": "BrailleATM",
+  "description": "Voice-assisted, accessible ATM simulator with PIN, withdrawal limits, and screen reader-friendly interaction.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./atm.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#00ff00",
+  "orientation": "any",
+  "categories": ["finance", "education", "accessibility", "training"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Withdraw",
+      "short_name": "Withdraw",
+      "description": "Go directly to withdrawal screen.",
+      "url": "./atm.html#withdraw"
+    },
+    {
+      "name": "Check Balance",
+      "short_name": "Balance",
+      "description": "Go directly to balance.",
+      "url": "./atm.html#balance"
+    }
+  ]
+}
