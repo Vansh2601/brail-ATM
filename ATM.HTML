@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <title>Braille Bank ATM</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#00ff00">
+  <link rel="manifest" href="manifest.json">
   <style>
     body {
       background-color: #111;
@@ -41,7 +44,7 @@
   <div id="terminal">
     <p id="display">Welcome to Braille Bank. Please enter your PIN:</p>
     <div id="input-area">
-      <input type="password" id="pinInput" />
+      <input type="password" id="pinInput" maxlength="4" />
       <button onclick="verifyPIN()">Submit</button>
     </div>
     <div id="menu" style="display: none;">
@@ -53,7 +56,7 @@
   </div>
 
   <script>
-    let balance = 100000000000;
+    let balance = 100000; // 1 lakh
     let correctPIN = "9770";
     const dailyLimit = 50000;
     let withdrawnToday = 0;
@@ -64,7 +67,6 @@
       msg.pitch = 0.9;
       msg.rate = 0.9;
       msg.volume = 1.0;
-
       const voices = speechSynthesis.getVoices();
       const maleVoice = voices.find(v => v.lang.includes("en") && !v.name.toLowerCase().includes("female"));
       if (maleVoice) msg.voice = maleVoice;
@@ -74,9 +76,7 @@
     function speakDigit(el) {
       const val = el.value;
       const last = val.charAt(val.length - 1);
-      if (/^\d$/.test(last)) {
-        speak(last);
-      }
+      if (/^\d$/.test(last)) speak(last);
     }
 
     window.speechSynthesis.onvoiceschanged = () => {
@@ -213,6 +213,16 @@
       const inputArea = document.getElementById("input-area");
       inputArea.style.display = "block";
       inputArea.innerHTML = `<button onclick="backToMenu()">Back to Menu</button>`;
+    }
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .then(reg => console.log('Service Worker registered:', reg))
+          .catch(err => console.error('Service Worker registration failed:', err));
+      });
     }
   </script>
 </body>
