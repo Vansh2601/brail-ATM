@@ -1,4 +1,6 @@
 {
+  "start_url": "./index.html",
+  "scope": "./"
   "name": "Braille Bank ATM",
   "short_name": "BrailleATM",
   "description": "Voice-assisted, accessible ATM simulator with PIN, withdrawal limits, and screen reader-friendly interaction.",
