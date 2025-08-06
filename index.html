@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Braille ATM</title>
+  <link rel="manifest" href="manifest.json" />
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js');
+  }
+</script>
+
   <link rel="manifest" href="manifest.json">
   <style>
     body { font-family: sans-serif; background: #111; color: white; text-align: center; padding: 20px; position: relative; }
@@ -53,7 +60,6 @@
     <button onclick="goBack()">Back</button>
   </div>
   <pre id="log"></pre>
-  <script>
     let correctPin = localStorage.getItem('atm_pin') || '9770';
     let balance = parseInt(localStorage.getItem('atm_balance') || '100000');
     let dailyLimit = 50000;
@@ -212,3 +218,4 @@
   </script>
 </body>
 </html>
+
