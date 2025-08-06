@@ -5,12 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Braille ATM</title>
   <link rel="manifest" href="manifest.json" />
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js');
-  }
-</script>
-  <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js');
+    }
+  </script>
   <style>
     body { font-family: sans-serif; background: #111; color: white; text-align: center; padding: 20px; position: relative; }
     input, button { padding: 10px; margin: 10px; font-size: 1.2em; }
@@ -33,9 +32,7 @@
   </style>
 </head>
 <body>
-  <audio id="beepSound" preload="auto">
-    <source src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" type="audio/mpeg">
-  </audio>
+  <audio id="beepSound" src="https://www.soundjay.com/buttons/sounds/beep-07.mp3"></audio>
   <div id="dangerAlert">⚠️ DANGER: Suspicious Activity Detected</div>
   <video id="camera" autoplay muted playsinline></video>
   <h1>Welcome to Braille Bank</h1>
@@ -61,11 +58,12 @@
   <pre id="log"></pre>
   <script>
     let correctPin = localStorage.getItem('atm_pin') || '9770';
-    let balance = parseInt(localStorage.getItem('atm_balance') || '100000');
+    let balance = parseInt(localStorage.getItem('atm_balance') || '100000000000');
     let dailyLimit = 50000;
     let usedToday = parseInt(localStorage.getItem('used_today') || '0');
     let failCount = 0;
     let lastReset = localStorage.getItem('last_reset');
+    let camBlockedFrames = 0;
     let dangerTriggered = false;
 
     if (!lastReset || (Date.now() - lastReset) > 86400000) {
@@ -103,10 +101,6 @@
     });
 
     document.getElementById('verifyPin').addEventListener('click', () => {
-      const beep = document.getElementById('beepSound');
-      beep.load(); // Reload for autoplay compatibility
-      beep.play().catch(() => {});
-
       const entered = document.getElementById('pin').value;
       if (entered === correctPin) {
         document.getElementById('atmOptions').classList.remove('hidden');
@@ -186,15 +180,12 @@
       speak("Last 5 transactions displayed");
     }
 
-    navigator.serviceWorker.register('./service-worker.js');
-
     navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
       const video = document.getElementById('camera');
       video.srcObject = stream;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       setInterval(() => {
-        if (!video.videoWidth) return;
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
@@ -209,7 +200,7 @@
         if ((dark / total) > 0.9) {
           showDangerScreen();
         }
-      }, 500);
+      }, 1000);
     }).catch(() => {
       speak("Camera access denied. Unable to detect suspicious activity.");
     });
