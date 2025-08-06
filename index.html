@@ -1,233 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Braille Bank ATM</title>
-  <link rel="manifest" href="./manifest.json">
-  <script>
-  navigator.serviceWorker.register('./service-worker.js')
-  </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#00ff00">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Braille ATM</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body {
-      background-color: #111;
-      color: #0f0;
-      font-family: monospace;
-      padding: 20px;
-    }
-    #terminal {
-      border: 2px solid #0f0;
-      padding: 20px;
-      font-size: 18px;
-      min-height: 300px;
+    body { font-family: sans-serif; background: #111; color: white; text-align: center; padding: 20px; position: relative; }
+    input, button { padding: 10px; margin: 10px; font-size: 1.2em; }
+    video { width: 100px; border: 2px solid white; position: absolute; top: 10px; right: 10px; }
+    .hidden { display: none; }
+    #dangerAlert {
+      position: fixed;
+      top: 0;
+      left: 0;
       width: 100%;
-      max-width: 600px;
-    }
-    input {
-      background: #000;
-      color: #0f0;
-      border: none;
-      border-bottom: 2px solid #0f0;
-      font-size: 18px;
-      width: 100%;
-    }
-    button {
-      background: #0f0;
-      color: #000;
-      font-size: 16px;
-      padding: 10px;
-      margin: 5px;
-      border: none;
-      cursor: pointer;
+      height: 100%;
+      background: red;
+      color: white;
+      font-size: 2em;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
     }
   </style>
 </head>
 <body>
-  <div id="terminal">
-    <p id="display">Welcome to Braille Bank. Please enter your PIN:</p>
-    <div id="input-area">
-      <input type="password" id="pinInput" maxlength="4" />
-      <button onclick="verifyPIN()">Submit</button>
-    </div>
-    <div id="menu" style="display: none;">
-      <button onclick="checkBalance()">🔍 Check Balance</button>
-      <button onclick="withdraw()">💵 Withdraw</button>
-      <button onclick="createNewPIN()">🆕 Create New PIN</button>
-    </div>
-    <p id="output"></p>
+  <audio id="beepSound" preload="auto">
+    <source src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" type="audio/mpeg">
+  </audio>
+  <div id="dangerAlert">⚠️ DANGER: Suspicious Activity Detected</div>
+  <video id="camera" autoplay muted playsinline></video>
+  <h1>Welcome to Braille Bank</h1>
+  <p id="instructions">Enter your Master PIN to access</p>
+  <input type="password" id="pin" placeholder="Enter PIN" maxlength="4" /><br>
+  <button id="verifyPin">Verify PIN</button>
+  <div id="atmOptions" class="hidden">
+    <button onclick="withdrawUI()">Withdraw</button>
+    <button onclick="changePinUI()">Change PIN</button>
+    <button onclick="showHistory()">View Transactions</button>
+    <button onclick="resetDay()">Reset Day</button>
   </div>
-
+  <div id="withdrawDiv" class="hidden">
+    <input type="number" id="amount" placeholder="Amount to withdraw" /><br>
+    <button onclick="withdraw()">Confirm Withdraw</button>
+    <button onclick="goBack()">Back</button>
+  </div>
+  <div id="changePinDiv" class="hidden">
+    <input type="password" id="newPin" placeholder="New PIN" maxlength="4" /><br>
+    <button onclick="changePin()">Change</button>
+    <button onclick="goBack()">Back</button>
+  </div>
+  <pre id="log"></pre>
   <script>
-    let balance = 100000; // 1 lakh
-    let correctPIN = "9770";
-    const dailyLimit = 50000;
-    let withdrawnToday = 0;
+    let correctPin = localStorage.getItem('atm_pin') || '9770';
+    let balance = parseInt(localStorage.getItem('atm_balance') || '100000');
+    let dailyLimit = 50000;
+    let usedToday = parseInt(localStorage.getItem('used_today') || '0');
+    let failCount = 0;
+    let lastReset = localStorage.getItem('last_reset');
+    let dangerTriggered = false;
+
+    if (!lastReset || (Date.now() - lastReset) > 86400000) {
+      usedToday = 0;
+      localStorage.setItem('used_today', '0');
+      localStorage.setItem('last_reset', Date.now());
+    }
 
     function speak(text) {
-      const msg = new SpeechSynthesisUtterance(text);
-      msg.lang = "en-US";
-      msg.pitch = 0.9;
-      msg.rate = 0.9;
-      msg.volume = 1.0;
-      const voices = speechSynthesis.getVoices();
-      const maleVoice = voices.find(v => v.lang.includes("en") && !v.name.toLowerCase().includes("female"));
-      if (maleVoice) msg.voice = maleVoice;
-      window.speechSynthesis.speak(msg);
+      const synth = window.speechSynthesis;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'en-IN';
+      utter.pitch = 1.2;
+      utter.rate = 1;
+      utter.voice = synth.getVoices().find(voice => voice.name.includes('Google UK English Male')) || null;
+      synth.speak(utter);
     }
 
-    function speakDigit(el) {
-      const val = el.value;
-      const last = val.charAt(val.length - 1);
-      if (/^\d$/.test(last)) speak(last);
+    function showDangerScreen() {
+      if (dangerTriggered) return;
+      dangerTriggered = true;
+      const alert = document.getElementById('dangerAlert');
+      const beep = document.getElementById('beepSound');
+      alert.style.display = 'flex';
+      beep.loop = true;
+      beep.play().catch(() => {
+        console.warn('Autoplay blocked. Will try again after user gesture.');
+      });
+      speak("Danger! Suspicious activity detected. Security alerted.");
     }
 
-    window.speechSynthesis.onvoiceschanged = () => {
-      speak("Welcome to Braille Bank. Please enter your PIN.");
-      document.getElementById("pinInput").addEventListener("input", () => speakDigit(pinInput));
-    };
+    document.getElementById('pin').addEventListener('input', e => {
+      const digit = e.data;
+      if (digit) speak(digit);
+    });
 
-    function numberToWords(num) {
-      const scales = ['', 'thousand', 'million', 'billion', 'trillion'];
-      const ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-      const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
-      const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    document.getElementById('verifyPin').addEventListener('click', () => {
+      const beep = document.getElementById('beepSound');
+      beep.load(); // Reload for autoplay compatibility
+      beep.play().catch(() => {});
 
-      function chunkToWords(chunk) {
-        let [hundreds, remainder] = [Math.floor(chunk / 100), chunk % 100];
-        let words = [];
-        if (hundreds > 0) words.push(ones[hundreds] + ' hundred');
-        if (remainder >= 10 && remainder < 20) words.push(teens[remainder - 10]);
-        else if (remainder >= 20) {
-          let [ten, one] = [Math.floor(remainder / 10), remainder % 10];
-          words.push(tens[ten] + (one > 0 ? '-' + ones[one] : ''));
-        } else if (remainder > 0) words.push(ones[remainder]);
-        return words.join(' ');
-      }
-
-      if (num === 0) return 'zero rupees';
-      let chunks = [], i = 0;
-      while (num > 0) {
-        chunks.push(num % 1000);
-        num = Math.floor(num / 1000);
-      }
-
-      let words = chunks.map((chunk, i) => chunk > 0 ? chunkToWords(chunk) + ' ' + scales[i] : '')
-        .reverse()
-        .join(' ')
-        .trim();
-
-      return words + ' rupees';
-    }
-
-    function verifyPIN() {
-      const enteredPIN = document.getElementById("pinInput").value;
-      if (enteredPIN === correctPIN) {
-        document.getElementById("input-area").style.display = "none";
-        document.getElementById("menu").style.display = "block";
-        document.getElementById("display").innerText = "PIN correct. Please choose an option:";
-        speak("PIN correct. Please choose an option.");
+      const entered = document.getElementById('pin').value;
+      if (entered === correctPin) {
+        document.getElementById('atmOptions').classList.remove('hidden');
+        document.getElementById('verifyPin').classList.add('hidden');
+        document.getElementById('pin').classList.add('hidden');
+        speak("PIN correct. Choose an option.");
       } else {
-        document.getElementById("display").innerText = "Incorrect PIN. Please try again:";
-        speak("Incorrect PIN. Please try again.");
+        failCount++;
+        speak("Incorrect PIN");
+        if (failCount >= 3) {
+          showDangerScreen();
+        }
       }
+    });
+
+    function withdrawUI() {
+      document.getElementById('withdrawDiv').classList.remove('hidden');
+      document.getElementById('atmOptions').classList.add('hidden');
+      speak("Enter amount to withdraw");
     }
 
-    function checkBalance() {
-      const message = `Your current balance is ₹${balance}.`;
-      const spoken = `Your current balance is ${numberToWords(balance)}.`;
-      document.getElementById("output").innerText = message;
-      speak(spoken);
-      addBackButton();
+    function changePinUI() {
+      document.getElementById('changePinDiv').classList.remove('hidden');
+      document.getElementById('atmOptions').classList.add('hidden');
+      speak("Enter new 4 digit PIN");
     }
 
     function withdraw() {
-      const inputArea = document.getElementById("input-area");
-      inputArea.style.display = "block";
-      inputArea.innerHTML = `
-        <p>Enter amount to withdraw (₹50,000 daily limit):</p>
-        <input type="number" id="amountInput" oninput="speakDigit(this)" />
-        <button onclick="processWithdraw()">Confirm</button>
-        <button onclick="backToMenu()">Back</button>
-      `;
-      speak("Please enter the amount to withdraw.");
-    }
-
-    function processWithdraw() {
-      const amount = parseInt(document.getElementById("amountInput").value);
-      const total = withdrawnToday + amount;
-
-      if (isNaN(amount) || amount <= 0) {
-        speak("Invalid amount.");
-        document.getElementById("output").innerText = "Please enter a valid amount.";
-      } else if (amount > balance) {
-        speak("Insufficient balance.");
-        document.getElementById("output").innerText = "Insufficient balance.";
-      } else if (total > dailyLimit) {
-        speak("Withdrawal limit of fifty thousand rupees per day exceeded.");
-        document.getElementById("output").innerText = `Limit exceeded. You can only withdraw ₹${dailyLimit - withdrawnToday} more today.`;
-      } else {
-        balance -= amount;
-        withdrawnToday += amount;
-        const message = `₹${amount} withdrawn. New balance: ₹${balance}.`;
-        const spoken = `${numberToWords(amount)} withdrawn. Your new balance is ${numberToWords(balance)}.`;
-        document.getElementById("output").innerText = message;
-        speak(spoken);
+      const amt = parseInt(document.getElementById('amount').value);
+      if (isNaN(amt)) return speak("Please enter a valid amount");
+      speak(amt.toString().split('').join(', '));
+      if (amt > 50000 || usedToday + amt > 50000) {
+        speak("Daily withdrawal limit exceeded");
+        return;
       }
-      document.getElementById("input-area").innerHTML = "";
-      addBackButton();
-    }
-
-    function createNewPIN() {
-      const inputArea = document.getElementById("input-area");
-      inputArea.style.display = "block";
-      inputArea.innerHTML = `
-        <p>Enter new 4-digit PIN:</p>
-        <input type="password" id="newPIN" maxlength="4" oninput="speakDigit(this)" />
-        <button onclick="processNewPIN()">Set PIN</button>
-        <button onclick="backToMenu()">Back</button>
-      `;
-      speak("Please enter a new four digit PIN.");
-    }
-
-    function processNewPIN() {
-      const newPin = document.getElementById("newPIN").value;
-      if (/^\d{4}$/.test(newPin)) {
-        correctPIN = newPin;
-        withdrawnToday = 0;
-        document.getElementById("output").innerText = "New PIN set successfully.";
-        speak("New PIN has been set successfully.");
-        document.getElementById("input-area").innerHTML = "";
-      } else {
-        speak("Invalid PIN. Enter four digits.");
-        document.getElementById("output").innerText = "Invalid PIN. Enter four digits.";
+      if (amt > balance) {
+        speak("Insufficient funds");
+        return;
       }
+      balance -= amt;
+      usedToday += amt;
+      localStorage.setItem('atm_balance', balance);
+      localStorage.setItem('used_today', usedToday);
+      let tx = JSON.parse(localStorage.getItem('transactions') || '[]');
+      tx.push({ amt, time: new Date().toLocaleString() });
+      localStorage.setItem('transactions', JSON.stringify(tx));
+      speak(`Transaction successful. Your new balance is ${balance}`);
+      alert(`Transaction successful. Balance: ₹${balance}`);
+      goBack();
     }
 
-    function backToMenu() {
-      document.getElementById("input-area").innerHTML = "";
-      document.getElementById("output").innerText = "";
-      document.getElementById("menu").style.display = "block";
-      document.getElementById("display").innerText = "Choose an option:";
-      speak("Choose an option.");
+    function changePin() {
+      const npin = document.getElementById('newPin').value;
+      if (npin.length !== 4) return speak("PIN must be 4 digits");
+      correctPin = npin;
+      localStorage.setItem('atm_pin', npin);
+      speak("PIN changed successfully");
+      goBack();
     }
 
-    function addBackButton() {
-      const inputArea = document.getElementById("input-area");
-      inputArea.style.display = "block";
-      inputArea.innerHTML = `<button onclick="backToMenu()">Back to Menu</button>`;
+    function goBack() {
+      document.getElementById('atmOptions').classList.remove('hidden');
+      document.getElementById('withdrawDiv').classList.add('hidden');
+      document.getElementById('changePinDiv').classList.add('hidden');
     }
-  </script>
 
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js')
-          .then(reg => console.log('Service Worker registered:', reg))
-          .catch(err => console.error('Service Worker registration failed:', err));
-      });
+    function resetDay() {
+      usedToday = 0;
+      localStorage.setItem('used_today', '0');
+      localStorage.setItem('last_reset', Date.now());
+      speak("Daily limit reset");
     }
+
+    function showHistory() {
+      const tx = JSON.parse(localStorage.getItem('transactions') || '[]');
+      document.getElementById('log').innerText = tx.slice(-5).map(t => `${t.time}: ₹${t.amt}`).join('\n');
+      speak("Last 5 transactions displayed");
+    }
+
+    navigator.serviceWorker.register('./service-worker.js');
+
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+      const video = document.getElementById('camera');
+      video.srcObject = stream;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      setInterval(() => {
+        if (!video.videoWidth) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = frame.data;
+        let dark = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+          const brightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+          if (brightness < 30) dark++;
+        }
+        const total = pixels.length / 4;
+        if ((dark / total) > 0.9) {
+          showDangerScreen();
+        }
+      }, 500);
+    }).catch(() => {
+      speak("Camera access denied. Unable to detect suspicious activity.");
+    });
+
+    speak("Welcome to Braille Bank. Please enter your PIN.");
   </script>
 </body>
 </html>
