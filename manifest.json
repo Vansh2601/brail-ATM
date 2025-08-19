@@ -1,11 +1,12 @@
 {
   "name": "Braille Bank ATM",
   "short_name": "BrailleATM",
-  "description": "A voice-assisted ATM simulation with security features for the visually impaired.",
-  "start_url": "index.html",
+  "description": "Voice-assisted Braille-ATM with multi-user support and security features.",
+  "start_url": "https://vansh2601.github.io/brail-ATM/",
+  "scope": "https://vansh2601.github.io/brail-ATM/",
   "display": "standalone",
   "background_color": "#111111",
-  "theme_color": "#111111",
+  "theme_color": "#0f0f0f",
   "orientation": "portrait",
   "icons": [
     {
