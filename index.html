@@ -2,179 +2,385 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Braille ATM</title>
+
+  <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
   <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./service-worker.js");
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js');
     }
   </script>
+
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #0f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
+    :root {
+      --bg: #111;
+      --panel: #1b1b1b;
+      --text: #d9ffe0;
+      --accent: #00ff7b;
+      --danger: #e10600;
     }
-    #atm {
-      background: #222;
-      padding: 20px;
-      border-radius: 15px;
-      box-shadow: 0 0 20px #0f0;
-      text-align: center;
-      width: 400px;
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
-    #danger {
-      display: none;
-      background: red;
-      color: white;
-      padding: 20px;
-      font-size: 20px;
-      margin-top: 10px;
+    .wrap {
+      height: 100%; display: grid; place-items: center; padding: 16px;
     }
-    canvas {
-      display: none;
+    .atm {
+      width: 420px; max-width: 92vw; background: var(--panel);
+      border-radius: 16px; padding: 24px; box-shadow: 0 0 32px rgba(0,255,123,.25);
+      border: 1px solid rgba(0,255,123,.25);
     }
-    video {
-      width: 300px;
-      border: 2px solid #0f0;
-      margin-top: 10px;
+    h1 { margin: 0 0 8px; font-size: 1.25rem; color: var(--accent); text-align: center; }
+    p  { margin: 6px 0 16px; opacity: .85; text-align: center; }
+    .screen {
+      min-height: 120px; background: #121212; border-radius: 12px; padding: 14px;
+      border: 1px dashed rgba(0,255,123,.25); font-size: 1.05rem;
     }
+    .row { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+    .btn {
+      padding: 10px 14px; border: 1px solid rgba(0,255,123,.3); color: var(--text);
+      background: #0e0e0e; border-radius: 10px; font-size: 0.95rem;
+      user-select: none; outline: none;
+    }
+    .btn:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,123,.2); }
+    .muted { opacity: .7; font-size: .95rem; margin-top: 8px; text-align: center; }
+
+    .danger {
+      position: fixed; inset: 0; background: rgba(225,6,0,.96); color: #fff;
+      display: none; align-items: center; justify-content: center; text-align: center;
+      z-index: 9999; padding: 24px;
+    }
+    .danger h2 { margin: 0 0 8px; font-size: 2rem; }
+    .danger p  { margin: 0; font-size: 1.1rem; }
+    .hidden { display: none !important; }
+
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .ok { color: var(--accent); }
   </style>
 </head>
 <body>
-  <div id="atm">
-    <h2>🟢 Braille ATM Simulator</h2>
-    <p>Enter PIN using keyboard only</p>
-    <div id="pin"></div>
-    <div id="danger">⚠️ DANGER! Suspicious Activity Detected!</div>
-    <video id="camera" autoplay muted></video>
-    <canvas id="canvas"></canvas>
+  <div class="wrap">
+    <div class="atm" aria-live="polite">
+      <h1>🟢 Braille ATM — Keyboard Only</h1>
+      <p class="muted">Use digits for PIN, <span class="kbd">Enter</span> = OK, <span class="kbd">Esc</span> = Clear</p>
+
+      <!-- LOGIN SCREEN -->
+      <div id="loginView" class="screen" aria-label="PIN entry screen">
+        <div id="pinLine" style="font-size:1.2rem;">Enter PIN: <span id="pinMask" class="kbd"></span></div>
+        <div id="status" class="muted" style="margin-top:10px;">Type your 4-digit PIN.</div>
+      </div>
+
+      <!-- MENU -->
+      <div id="menuView" class="screen hidden">
+        <div style="margin-bottom:8px;">Welcome! Choose an option:</div>
+        <ul style="margin:0 0 6px 18px; padding:0;">
+          <li><span class="kbd">W</span> — Withdraw</li>
+          <li><span class="kbd">C</span> — Change PIN</li>
+          <li><span class="kbd">T</span> — Last 5 Transactions</li>
+          <li><span class="kbd">L</span> — Logout</li>
+        </ul>
+        <div id="menuHint" class="muted">Use keyboard shortcuts above.</div>
+      </div>
+
+      <!-- WITHDRAW -->
+      <div id="withdrawView" class="screen hidden">
+        <div>Enter amount to withdraw, then press <span class="kbd">Enter</span>:</div>
+        <div class="kbd" id="amountLine" style="font-size:1.2rem;margin-top:6px;">₹ <span id="amtDigits"></span></div>
+        <div class="muted">Daily limit ₹50,000. <span id="balanceLine"></span></div>
+      </div>
+
+      <!-- CHANGE PIN -->
+      <div id="changeView" class="screen hidden">
+        <div>Enter new 4-digit PIN, press <span class="kbd">Enter</span>:</div>
+        <div class="kbd" id="newPinLine" style="font-size:1.2rem;margin-top:6px;">New PIN: <span id="newPinMask"></span></div>
+        <div class="muted">Tip: Choose a unique PIN.</div>
+      </div>
+
+      <!-- TRANSACTIONS -->
+      <div id="txView" class="screen hidden">
+        <div>Last 5 transactions:</div>
+        <pre id="txLog" style="margin:8px 0 0; font-size:.95rem; white-space:pre-wrap;"></pre>
+      </div>
+
+      <!-- ACTION ROW -->
+      <div class="row">
+        <button class="btn" id="backBtn" aria-label="Back" title="Back" disabled>Back</button>
+        <button class="btn" id="okBtn" aria-label="OK" title="OK">OK</button>
+      </div>
+      <div class="muted">Mouse is disabled. Operate only with keyboard.</div>
+    </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <!-- DANGER OVERLAY -->
+  <div id="danger" class="danger" role="alert" aria-live="assertive">
+    <div>
+      <h2>⚠️ DANGER</h2>
+      <p>Suspicious activity detected. Access locked.</p>
+      <p class="muted">Press <span class="kbd">Esc</span> to return to login.</p>
+    </div>
+  </div>
+
+  <!-- Beep audio (looped when danger) -->
+  <audio id="beep" preload="auto" loop>
+    <source src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" type="audio/mpeg">
+  </audio>
+
   <script>
-    const video = document.getElementById("camera");
-    const canvas = document.getElementById("canvas");
-    const dangerScreen = document.getElementById("danger");
-    const pinDisplay = document.getElementById("pin");
+    /************ STATE ************/
+    const DEFAULT_PIN = '9770';                         // initial PIN
+    const DAILY_LIMIT = 50000;
+    const BALANCE_KEY = 'atm_balance';
+    const PIN_KEY = 'atm_pin';
+    const TX_KEY = 'atm_tx';
+    const USED_TODAY_KEY = 'atm_used_today';
+    const LAST_RESET_KEY = 'atm_last_reset';
 
-    let pin = "";
-    let beep = new AudioContext();
-    let suspicious = false;
+    let currentView = 'login';                          // login | menu | withdraw | change | tx
+    let pinInput = '';                                  // 4-digit buffer
+    let newPinInput = '';
+    let amountInput = '';
+    let wrongAttempts = 0;
+    let dangerOn = false;
 
-    // 🚫 Disable mouse completely
-    ["contextmenu","mousedown","mouseup","click","dblclick","mousemove","wheel"]
-      .forEach(evt => document.addEventListener(evt, e => e.preventDefault()));
+    let balance = parseInt(localStorage.getItem(BALANCE_KEY) || '100000000000', 10);
+    let pin = localStorage.getItem(PIN_KEY) || DEFAULT_PIN;
+    let tx = JSON.parse(localStorage.getItem(TX_KEY) || '[]');
 
-    // 🎹 Keyboard-only ATM control
-    document.addEventListener("keydown", function(event) {
-      if (!isNaN(event.key)) {
-        handlePINInput(event.key);
-      } else {
-        switch(event.key) {
-          case "Enter": confirmSelection(); break;
-          case "Escape": cancelOperation(); break;
-          case "ArrowUp": navigateMenu("up"); break;
-          case "ArrowDown": navigateMenu("down"); break;
-          case "ArrowLeft": navigateMenu("left"); break;
-          case "ArrowRight": navigateMenu("right"); break;
+    let usedToday = parseInt(localStorage.getItem(USED_TODAY_KEY) || '0', 10);
+    let lastReset = parseInt(localStorage.getItem(LAST_RESET_KEY) || '0', 10);
+
+    const els = {
+      loginView: document.getElementById('loginView'),
+      menuView: document.getElementById('menuView'),
+      withdrawView: document.getElementById('withdrawView'),
+      changeView: document.getElementById('changeView'),
+      txView: document.getElementById('txView'),
+      pinMask: document.getElementById('pinMask'),
+      status: document.getElementById('status'),
+      okBtn: document.getElementById('okBtn'),
+      backBtn: document.getElementById('backBtn'),
+      amtDigits: document.getElementById('amtDigits'),
+      balanceLine: document.getElementById('balanceLine'),
+      newPinMask: document.getElementById('newPinMask'),
+      txLog: document.getElementById('txLog'),
+      danger: document.getElementById('danger'),
+      beep: document.getElementById('beep')
+    };
+
+    /************ UTIL ************/
+    function speak(text){
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-IN'; u.pitch = 1.1; u.rate = 0.95;
+      window.speechSynthesis.speak(u);
+    }
+    function save(){
+      localStorage.setItem(BALANCE_KEY, String(balance));
+      localStorage.setItem(PIN_KEY, pin);
+      localStorage.setItem(TX_KEY, JSON.stringify(tx));
+      localStorage.setItem(USED_TODAY_KEY, String(usedToday));
+      localStorage.setItem(LAST_RESET_KEY, String(lastReset));
+    }
+    function show(view){
+      currentView = view;
+      els.loginView.classList.toggle('hidden', view!=='login');
+      els.menuView.classList.toggle('hidden', view!=='menu');
+      els.withdrawView.classList.toggle('hidden', view!=='withdraw');
+      els.changeView.classList.toggle('hidden', view!=='change');
+      els.txView.classList.toggle('hidden', view!=='tx');
+      els.backBtn.disabled = (view==='login' || view==='menu');
+      if(view==='withdraw'){
+        els.balanceLine.textContent = `Balance ₹${balance.toLocaleString()} | Used today ₹${usedToday.toLocaleString()} / ₹${DAILY_LIMIT.toLocaleString()}`;
+      }
+    }
+    function resetDailyIfNeeded(){
+      const now = Date.now();
+      if(!lastReset || (now - lastReset) > 86400000){
+        usedToday = 0;
+        lastReset = now;
+        save();
+      }
+    }
+    function showDanger(){
+      dangerOn = true;
+      els.danger.style.display = 'flex';
+      els.beep.play().catch(()=>{});
+      speak('Danger! Suspicious activity detected. Access locked.');
+    }
+    function hideDanger(){
+      dangerOn = false;
+      els.danger.style.display = 'none';
+      els.beep.pause();
+      els.beep.currentTime = 0;
+    }
+
+    /************ MOUSE FULLY DISABLED ************/
+    ['contextmenu','mousedown','mouseup','click','dblclick','mousemove','wheel']
+      .forEach(evt => document.addEventListener(evt, e => e.preventDefault(), {passive:false}));
+
+    /************ KEYBOARD-ONLY HANDLERS ************/
+    // Global keydown
+    document.addEventListener('keydown', (e)=>{
+      // digits everywhere (for PIN / amounts / new pin)
+      if (/^[0-9]$/.test(e.key)) {
+        if(currentView==='login'){
+          if (pinInput.length < 4){
+            pinInput += e.key;
+            els.pinMask.textContent = '*'.repeat(pinInput.length);
+            speakDigit(e.key);
+          }
+        } else if(currentView==='withdraw'){
+          if (amountInput.length < 7){ // up to 9,99,999
+            amountInput += e.key;
+            els.amtDigits.textContent = amountInput.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            speakDigit(e.key);
+          }
+        } else if(currentView==='change'){
+          if (newPinInput.length < 4){
+            newPinInput += e.key;
+            els.newPinMask.textContent = '*'.repeat(newPinInput.length);
+            speakDigit(e.key);
+          }
         }
+        e.preventDefault();
+        return;
+      }
+
+      switch(e.key){
+        case 'Backspace':
+          if(currentView==='login' && pinInput.length){
+            pinInput = pinInput.slice(0,-1);
+            els.pinMask.textContent = '*'.repeat(pinInput.length);
+          } else if(currentView==='withdraw' && amountInput.length){
+            amountInput = amountInput.slice(0,-1);
+            els.amtDigits.textContent = amountInput.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+          } else if(currentView==='change' && newPinInput.length){
+            newPinInput = newPinInput.slice(0,-1);
+            els.newPinMask.textContent = '*'.repeat(newPinInput.length);
+          }
+          e.preventDefault();
+          break;
+
+        case 'Enter':
+          onOk();
+          e.preventDefault();
+          break;
+
+        case 'Escape':
+          if (dangerOn){ hideDanger(); show('login'); clearAllBuffers(); }
+          else onBack();
+          e.preventDefault();
+          break;
+
+        // Menu shortcuts
+        case 'w': case 'W':
+          if(currentView==='menu'){ openWithdraw(); e.preventDefault(); }
+          break;
+        case 'c': case 'C':
+          if(currentView==='menu'){ openChangePin(); e.preventDefault(); }
+          break;
+        case 't': case 'T':
+          if(currentView==='menu'){ openTx(); e.preventDefault(); }
+          break;
+        case 'l': case 'L':
+          if(currentView==='menu'){ logout(); e.preventDefault(); }
+          break;
       }
     });
 
-    function handlePINInput(num) {
-      if (pin.length < 4) {
-        pin += num;
-        pinDisplay.innerText = "🔒 " + "*".repeat(pin.length);
-      }
-    }
-    function confirmSelection() {
-      console.log("✅ Confirmed");
-    }
-    function cancelOperation() {
-      console.log("❌ Cancelled");
-      pin = "";
-      pinDisplay.innerText = "";
-    }
-    function navigateMenu(direction) {
-      console.log("➡️ Navigating: " + direction);
+    // Buttons (space/enter activate too)
+    els.okBtn.addEventListener('click', onOk);
+    els.backBtn.addEventListener('click', onBack);
+
+    function speakDigit(d){
+      const names = { '0':'zero','1':'one','2':'two','3':'three','4':'four','5':'five','6':'six','7':'seven','8':'eight','9':'nine' };
+      speak(names[d] || d);
     }
 
-    // 📷 Camera setup
-    async function startCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
-      video.srcObject = stream;
-    }
-
-    // 🔊 Beep sound
-    function startBeep() {
-      let oscillator = beep.createOscillator();
-      let gain = beep.createGain();
-      oscillator.connect(gain);
-      gain.connect(beep.destination);
-      oscillator.type = "square";
-      oscillator.frequency.setValueAtTime(800, beep.currentTime);
-      gain.gain.setValueAtTime(0.1, beep.currentTime);
-      oscillator.start();
-      oscillator.stop(beep.currentTime + 0.2);
-    }
-
-    // 📸 Take screenshot
-    function takeScreenshot() {
-      const ctx = canvas.getContext("2d");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imgData = canvas.toDataURL("image/png");
-      console.log("📸 Screenshot taken:", imgData.substring(0,50));
-    }
-
-    // 🚨 Show danger screen
-    function showDanger() {
-      dangerScreen.style.display = "block";
-      startBeep();
-      takeScreenshot();
-      speak("Danger! Suspicious activity detected!");
-    }
-    function hideDanger() {
-      dangerScreen.style.display = "none";
-    }
-
-    // 🗣️ Speech synthesis
-    function speak(msg) {
-      const utter = new SpeechSynthesisUtterance(msg);
-      utter.lang = "en-US";
-      speechSynthesis.speak(utter);
-    }
-
-    // 👤 Face detection
-    async function runFaceDetection() {
-      await faceapi.nets.tinyFaceDetector.loadFromUri("https://justadudewhohacks.github.io/face-api.js/models");
-      startCamera();
-
-      setInterval(async () => {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
-        if (detections.length !== 1) {
-          if (!suspicious) {
-            suspicious = true;
+    /************ FLOW ************/
+    function onOk(){
+      if(currentView==='login'){
+        if (pinInput.length < 4){ els.status.textContent = 'Enter 4-digit PIN.'; return; }
+        if (pinInput === pin){
+          wrongAttempts = 0;
+          els.status.innerHTML = '<span class="ok">PIN correct.</span>';
+          speak('PIN correct. Choose an option.');
+          show('menu');
+          clearAllBuffers();
+        } else {
+          wrongAttempts++;
+          els.status.textContent = `Incorrect PIN. Attempts: ${wrongAttempts}/3`;
+          speak('Incorrect PIN');
+          pinInput = '';
+          els.pinMask.textContent = '';
+          if (wrongAttempts >= 3) {
             showDanger();
           }
-        } else {
-          suspicious = false;
-          hideDanger();
         }
-      }, 500); // 🔄 Scan every 500ms
+      } else if(currentView==='withdraw'){
+        const amt = parseInt(amountInput || '0', 10);
+        if (!amt || amt<=0){ speak('Please enter a valid amount.'); return; }
+        resetDailyIfNeeded();
+        if (amt > balance){ speak('Insufficient funds.'); return; }
+        if (usedToday + amt > DAILY_LIMIT){ speak('Daily withdrawal limit exceeded.'); return; }
+        balance -= amt;
+        usedToday += amt;
+        tx.push({ time: new Date().toLocaleString(), amt: -amt });
+        save();
+        speak(`Withdrawn ${amt} rupees. New balance ${balance} rupees.`);
+        amountInput = '';
+        els.amtDigits.textContent = '';
+        show('menu');
+      } else if(currentView==='change'){
+        if (newPinInput.length !== 4){ speak('PIN must be four digits.'); return; }
+        pin = newPinInput;
+        save();
+        speak('PIN changed successfully.');
+        newPinInput = '';
+        els.newPinMask.textContent = '';
+        show('menu');
+      }
     }
 
-    runFaceDetection();
+    function onBack(){
+      if(currentView==='withdraw' || currentView==='change' || currentView==='tx'){
+        show('menu');
+        if(currentView==='withdraw'){ amountInput=''; els.amtDigits.textContent=''; }
+        if(currentView==='change'){ newPinInput=''; els.newPinMask.textContent=''; }
+      } else if(currentView==='menu'){
+        logout();
+      }
+    }
+
+    function openWithdraw(){ show('withdraw'); }
+    function openChangePin(){ show('change'); }
+    function openTx(){
+      const last = tx.slice(-5).reverse().map(t => `${t.time}: ₹${(t.amt).toLocaleString()}`).join('\n');
+      els.txLog.textContent = last || 'No transactions yet.';
+      show('tx');
+    }
+    function logout(){
+      clearAllBuffers();
+      show('login');
+      els.status.textContent = 'Type your 4-digit PIN.';
+      speak('Logged out. Please enter your PIN.');
+    }
+    function clearAllBuffers(){
+      pinInput=''; amountInput=''; newPinInput='';
+      els.pinMask.textContent = '';
+      els.amtDigits.textContent = '';
+      els.newPinMask.textContent = '';
+    }
+
+    // Init
+    (function init(){
+      resetDailyIfNeeded();
+      show('login');
+      speak('Welcome to Braille A T M. Please enter your P I N using the keyboard.');
+    })();
   </script>
 </body>
 </html>
-
