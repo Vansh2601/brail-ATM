@@ -1,112 +1,180 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Braille ATM Security</title>
-  <link rel="manifest" href="manifest.json">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Braille ATM</title>
+  <link rel="manifest" href="manifest.json" />
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./service-worker.js");
+    }
+  </script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
       background: #111;
-      color: #fff;
+      color: #0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
     }
-    #video {
-      border: 3px solid #0f0;
-      margin-top: 20px;
-      border-radius: 8px;
+    #atm {
+      background: #222;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 0 20px #0f0;
+      text-align: center;
+      width: 400px;
     }
-    #dangerScreen {
+    #danger {
       display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
       background: red;
       color: white;
-      font-size: 2em;
-      font-weight: bold;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      z-index: 9999;
+      padding: 20px;
+      font-size: 20px;
+      margin-top: 10px;
+    }
+    canvas {
+      display: none;
+    }
+    video {
+      width: 300px;
+      border: 2px solid #0f0;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>🔒 Braille ATM Security System</h1>
-  <video id="video" width="400" height="300" autoplay muted></video>
-
-  <div id="dangerScreen">
-    <p id="dangerMessage">⚠ DANGER! Suspicious Activity Detected ⚠</p>
+  <div id="atm">
+    <h2>🟢 Braille ATM Simulator</h2>
+    <p>Enter PIN using keyboard only</p>
+    <div id="pin"></div>
+    <div id="danger">⚠️ DANGER! Suspicious Activity Detected!</div>
+    <video id="camera" autoplay muted></video>
+    <canvas id="canvas"></canvas>
   </div>
 
-  <audio id="beepSound" loop>
-    <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
-  </audio>
-
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
   <script>
-    const video = document.getElementById('video');
-    const dangerScreen = document.getElementById('dangerScreen');
-    const dangerMessage = document.getElementById('dangerMessage');
-    const beepSound = document.getElementById('beepSound');
+    const video = document.getElementById("camera");
+    const canvas = document.getElementById("canvas");
+    const dangerScreen = document.getElementById("danger");
+    const pinDisplay = document.getElementById("pin");
 
-    // Load Face API models
-    async function loadModels() {
-      await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/weights');
-      startVideo();
-    }
+    let pin = "";
+    let beep = new AudioContext();
+    let suspicious = false;
 
-    // Start webcam
-    function startVideo() {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          video.srcObject = stream;
-        })
-        .catch(err => {
-          console.error("Camera access denied:", err);
-        });
-    }
+    // 🚫 Disable mouse completely
+    ["contextmenu","mousedown","mouseup","click","dblclick","mousemove","wheel"]
+      .forEach(evt => document.addEventListener(evt, e => e.preventDefault()));
 
-    // Show Danger
-    function showDangerScreen(message) {
-      dangerMessage.innerText = message;
-      dangerScreen.style.display = "flex";
-      beepSound.play();
-    }
-
-    // Hide Danger
-    function hideDangerScreen() {
-      dangerScreen.style.display = "none";
-      beepSound.pause();
-      beepSound.currentTime = 0;
-    }
-
-    // Detect faces every 500ms
-    setInterval(async () => {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
-        const faceCount = detections.length;
-
-        if (faceCount > 1) {
-          showDangerScreen("⚠ Multiple faces detected! Possible fraud.");
-        } else if (faceCount === 0) {
-          showDangerScreen("⚠ Camera blocked or no face detected!");
-        } else {
-          hideDangerScreen();
+    // 🎹 Keyboard-only ATM control
+    document.addEventListener("keydown", function(event) {
+      if (!isNaN(event.key)) {
+        handlePINInput(event.key);
+      } else {
+        switch(event.key) {
+          case "Enter": confirmSelection(); break;
+          case "Escape": cancelOperation(); break;
+          case "ArrowUp": navigateMenu("up"); break;
+          case "ArrowDown": navigateMenu("down"); break;
+          case "ArrowLeft": navigateMenu("left"); break;
+          case "ArrowRight": navigateMenu("right"); break;
         }
       }
-    }, 500);
+    });
 
-    loadModels();
-  </script>
-
-  <script>
-    // Service Worker Registration
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js');
+    function handlePINInput(num) {
+      if (pin.length < 4) {
+        pin += num;
+        pinDisplay.innerText = "🔒 " + "*".repeat(pin.length);
+      }
     }
+    function confirmSelection() {
+      console.log("✅ Confirmed");
+    }
+    function cancelOperation() {
+      console.log("❌ Cancelled");
+      pin = "";
+      pinDisplay.innerText = "";
+    }
+    function navigateMenu(direction) {
+      console.log("➡️ Navigating: " + direction);
+    }
+
+    // 📷 Camera setup
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+      video.srcObject = stream;
+    }
+
+    // 🔊 Beep sound
+    function startBeep() {
+      let oscillator = beep.createOscillator();
+      let gain = beep.createGain();
+      oscillator.connect(gain);
+      gain.connect(beep.destination);
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(800, beep.currentTime);
+      gain.gain.setValueAtTime(0.1, beep.currentTime);
+      oscillator.start();
+      oscillator.stop(beep.currentTime + 0.2);
+    }
+
+    // 📸 Take screenshot
+    function takeScreenshot() {
+      const ctx = canvas.getContext("2d");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imgData = canvas.toDataURL("image/png");
+      console.log("📸 Screenshot taken:", imgData.substring(0,50));
+    }
+
+    // 🚨 Show danger screen
+    function showDanger() {
+      dangerScreen.style.display = "block";
+      startBeep();
+      takeScreenshot();
+      speak("Danger! Suspicious activity detected!");
+    }
+    function hideDanger() {
+      dangerScreen.style.display = "none";
+    }
+
+    // 🗣️ Speech synthesis
+    function speak(msg) {
+      const utter = new SpeechSynthesisUtterance(msg);
+      utter.lang = "en-US";
+      speechSynthesis.speak(utter);
+    }
+
+    // 👤 Face detection
+    async function runFaceDetection() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri("https://justadudewhohacks.github.io/face-api.js/models");
+      startCamera();
+
+      setInterval(async () => {
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+        if (detections.length !== 1) {
+          if (!suspicious) {
+            suspicious = true;
+            showDanger();
+          }
+        } else {
+          suspicious = false;
+          hideDanger();
+        }
+      }, 500); // 🔄 Scan every 500ms
+    }
+
+    runFaceDetection();
   </script>
 </body>
 </html>
+
