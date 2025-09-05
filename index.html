@@ -82,7 +82,7 @@
   <pre id="output"></pre>
 
   <script>
-    /************ DATA + UTILITIES ****************/
+/************ DATA + UTILITIES ****************/
 const users = JSON.parse(localStorage.getItem('BrailleATM_users')) || {
   "0001": { pin: "9770", balance: 100000, tx: [] },
   "0002": { pin: "2222", balance: 50000,  tx: [] }
@@ -242,8 +242,8 @@ function generatePDF(amt){
   const doc = new jsPDF();
   doc.text(`Braille ATM\nCard: ${activeCard}\nWithdraw: ₹${amt}\nBalance: ₹${users[activeCard].balance}\nTime: ${new Date().toLocaleString()}`, 10,10);
   doc.save('receipt.pdf');
-    }
-    /************ DANGER + CAMERA ***************/
+}
+/************ DANGER + CAMERA ***************/
 function showDanger() {
   if (dangerTriggered) return;
   dangerTriggered = true;
@@ -334,95 +334,5 @@ resetIdle();
 <!-- pdf library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
-</html>/************ DANGER + CAMERA ***************/
-function showDanger() {
-  if (dangerTriggered) return;
-  dangerTriggered = true;
+</html>
 
-  document.getElementById('dangerAlert').style.display = 'flex';
-  const beep = document.getElementById('beep');
-  beep.loop = true;
-  beep.play().catch(()=>{});
-
-  speak('Danger. Suspicious activity detected');
-
-  // take screenshot
-  captureImage();
-}
-
-function captureImage(){
-  const video = document.getElementById('camera');
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  const imgData = canvas.toDataURL('image/png');
-
-  // store in localStorage (or send to server)
-  let shots = JSON.parse(localStorage.getItem('capturedShots')||'[]');
-  shots.push({card:activeCard, time:new Date().toLocaleString(), data:imgData});
-  localStorage.setItem('capturedShots',JSON.stringify(shots));
-}
-
-/************ CAMERA MONITOR (face + obstruction) ***************/
-navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
-   const video=document.getElementById('camera');
-   video.srcObject = stream;
-
-   const faceDetector =  ('FaceDetector' in window) ? new FaceDetector() : null;
-   const canvas = document.createElement('canvas');
-   const ctx = canvas.getContext('2d');
-
-   setInterval(async ()=>{
-     resetIdle();
-     if(!video.videoWidth) return;
-
-     canvas.width = video.videoWidth;
-     canvas.height = video.videoHeight;
-     ctx.drawImage(video,0,0);
-
-     // check brightness:
-     const frame = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-     let dark=0;
-     for(let i=0;i<frame.length;i+=4){
-       const b=(frame[i]+frame[i+1]+frame[i+2])/3;
-       if(b<30) dark++;
-     }
-     if((dark/(frame.length/4))>0.9){ showDanger(); return;}
-
-     // check face count:
-     if(faceDetector){
-       try{
-         const faces = await faceDetector.detect(video);
-         if(faces.length>1) showDanger();
-       }catch(e){}
-     }
-
-   },500); // <= every 500ms
-}).catch(()=>{
-   speak('Camera access denied. Security disabled.');
-});
-
-/************ RESET TO LOGIN ***************/
-function showPINScreen(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('withdrawDiv').classList.add('hidden');
-  document.getElementById('changeDiv').classList.add('hidden');
-  document.getElementById('adminPanel').style.display='none';
-  document.getElementById('pinLogin').classList.add('hidden');
-  document.getElementById('cardLogin').classList.remove('hidden');
-  document.getElementById('output').innerText='';
-  dangerTriggered=false;
-  speechSynthesis.cancel();
-}
-
-/************ START MESSAGE ****************/
-speak('Welcome to Braille Bank. Please enter card number.');
-resetIdle();
-
-</script>
-
-<!-- pdf library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-</body>
-   </html>
