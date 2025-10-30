@@ -3,336 +3,164 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Braille ATM</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json" />
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js');
-    }
-  </script>
-
+  <title>AI Voice-Assisted Braille ATM</title>
   <style>
-    body {font-family: sans-serif; background:#111; color:#0f0; text-align:center; position:relative; padding:20px;}
-    input, button {padding:10px;margin:8px;font-size:1rem;}
-    .hidden {display:none;}
-    #dangerAlert{
-      background:red;color:white;position:fixed;top:0;left:0;width:100%;height:100%;
-      display:none;align-items:center;justify-content:center;z-index:9999;font-size:2rem;
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: #00ff99;
+      text-align: center;
+      padding: 30px;
+      user-select: none;
     }
-    #adminPanel{ display:none; border:1px solid #0f0; padding:15px; margin-top:10px; }
-    video{position:absolute;top:10px;right:10px;width:100px;border:2px solid #fff;}
-    .contrast{ background:#000; color:yellow; }
+    h1 {
+      color: #00ffcc;
+      font-size: 1.8em;
+    }
+    .screen {
+      margin: 30px auto;
+      padding: 25px;
+      width: 90%;
+      max-width: 500px;
+      background-color: #111;
+      border: 3px solid #00ffcc;
+      border-radius: 15px;
+      box-shadow: 0 0 20px #00ffcc;
+    }
+    input {
+      width: 80%;
+      padding: 10px;
+      font-size: 1.1em;
+      margin: 10px;
+      background: #222;
+      color: #0f0;
+      border: 1px solid #00ffcc;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      background-color: #00ffcc;
+      border: none;
+      color: #000;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 1.1em;
+    }
+    button:hover {
+      background-color: #00ffaa;
+    }
   </style>
 </head>
 <body>
-  <audio id="beep" preload="auto">
-    <source src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" type="audio/mpeg">
-  </audio>
-
-  <div id="dangerAlert">⚠️ DANGER: Suspicious Activity Detected</div>
-  <video id="camera" autoplay muted playsinline></video>
-
-  <h1>Braille Bank ATM</h1>
-
-  <!-- CARD LOGIN -->
-  <div id="cardLogin">
-    <input type="text" id="cardNo" placeholder="Card Number"/>
-    <button onclick="enterCard()">Continue</button>
+  <h1>AI Voice-Assisted Braille ATM</h1>
+  <div class="screen" id="atmScreen">
+    <p id="message">Press <b>Enter</b> to start or <b>N</b> to create a new card.</p>
   </div>
-
-  <!-- PIN LOGIN -->
-  <div id="pinLogin" class="hidden">
-    <input type="password" id="pin" placeholder="PIN" maxlength="4"/>
-    <button onclick="verifyPIN()">Verify PIN</button>
-  </div>
-
-  <!-- ATM MENU -->
-  <div id="menu" class="hidden">
-    <button onclick="withdrawUI()">Withdraw</button>
-    <button onclick="changePinUI()">Change PIN</button>
-    <button onclick="showHistory()">Transactions</button>
-    <button onclick="toggleContrast()">Toggle Contrast</button>
-    <button onclick="startAdmin()">Admin</button>
-  </div>
-
-  <!-- WITHDRAW -->
-  <div id="withdrawDiv" class="hidden">
-    <input type="number" id="amount" placeholder="Withdraw Amount"/>
-    <button onclick="withdraw()">Confirm</button>
-    <button onclick="goBack()">Back</button>
-  </div>
-
-  <!-- CHANGE PIN -->
-  <div id="changeDiv" class="hidden">
-    <input type="password" id="newPin" placeholder="New PIN" maxlength="4"/>
-    <button onclick="changePin()">Confirm Change</button>
-    <button onclick="goBack()">Back</button>
-  </div>
-
-  <!-- ADMIN PANEL -->
-  <div id="adminPanel">
-    <h3>Admin Mode</h3>
-    <input type="number" id="refillAmt" placeholder="Add cash to current user"/>
-    <button onclick="refill()">Refill</button>
-    <button onclick="exitAdmin()">Exit Admin</button>
-  </div>
-
-  <pre id="output"></pre>
 
   <script>
-/************ DATA + UTILITIES ****************/
-const users = JSON.parse(localStorage.getItem('BrailleATM_users')) || {
-  "0001": { pin: "9770", balance: 100000, tx: [] },
-  "0002": { pin: "2222", balance: 50000,  tx: [] }
-};
-let activeCard = "";
-const maxDaily = 50000;
-let dailyUsed = parseInt(localStorage.getItem('dailyUsed')||'0');
-let lastReset = localStorage.getItem('lastReset');
-let idleTimer;
-let dangerTriggered = false;
+    const synth = window.speechSynthesis;
+    let currentStep = "welcome";
+    let cards = JSON.parse(localStorage.getItem("cards")) || {};
 
-// reset daily limit every 24h :
-if(!lastReset || (Date.now() - lastReset) > 86400000){
-  dailyUsed = 0;
-  localStorage.setItem("dailyUsed","0");
-  localStorage.setItem("lastReset", Date.now());
-}
+    function speak(text) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "en-US";
+      synth.speak(utter);
+    }
 
-function saveUsers(){ localStorage.setItem('BrailleATM_users', JSON.stringify(users)); }
+    function saveCards() {
+      localStorage.setItem("cards", JSON.stringify(cards));
+    }
 
-function speak(text){
-  const u=new SpeechSynthesisUtterance(text);
-  u.lang="en-IN"; u.pitch=1.1; u.rate=0.9;
-  speechSynthesis.speak(u);
-}
+    function showMessage(text) {
+      document.getElementById("message").innerText = text;
+      speak(text);
+    }
 
-function resetIdle(){
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(()=>{ showPINScreen() },30000); //30s logout
-}
-
-/************ LOGIN ****************/
-function enterCard(){
-  const card = document.getElementById('cardNo').value.trim();
-  if(!users[card]){ alert("Unknown Card"); return; }
-  activeCard = card;
-  document.getElementById('cardLogin').classList.add('hidden');
-  document.getElementById('pinLogin').classList.remove('hidden');
-  speak("Enter the PIN for card "+card);
-  resetIdle();
-}
-
-function verifyPIN(){
-  const p = document.getElementById('pin').value;
-  if(p === users[activeCard].pin){
-    document.getElementById('pinLogin').classList.add('hidden');
-    document.getElementById('menu').classList.remove('hidden');
-    speak("PIN correct. Choose an option.");
-  }else{
-    speak("Incorrect PIN");
-    showDanger();
-  }
-  resetIdle();
-}
-
-/************ MENU ACTIONS ****************/
-function withdrawUI(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('withdrawDiv').classList.remove('hidden');
-  speak("Enter amount to withdraw or say the amount.");
-  // speech recognition
-  startSpeechRecognition();
-  resetIdle();
-}
-
-function withdraw(){
-  const amt = parseInt(document.getElementById('amount').value);
-  if(isNaN(amt)){ speak("Invalid amount"); return;}
-  if(amt > users[activeCard].balance){ speak("Insufficient funds"); return;}
-  if(dailyUsed + amt > maxDaily){ speak("Daily limit exceeded"); return;}
-  users[activeCard].balance -= amt;
-  users[activeCard].tx.push({time: new Date().toLocaleString(), amt});
-  dailyUsed += amt;
-  saveUsers();
-  localStorage.setItem("dailyUsed", dailyUsed);
-  // PDF receipt
-  generatePDF(amt);
-  speak("Transaction successful. Your new balance is " + users[activeCard].balance);
-  goBack();
-  resetIdle();
-}
-
-function changePinUI(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('changeDiv').classList.remove('hidden');
-  speak("Enter new PIN");
-  resetIdle();
-}
-
-function changePin(){
-  const np = document.getElementById('newPin').value;
-  if(!/^[0-9]{4}$/.test(np)){ speak("PIN must be 4 digits"); return;}
-  users[activeCard].pin = np;
-  saveUsers();
-  speak("PIN changed successfully");
-  goBack();
-  resetIdle();
-}
-
-function showHistory(){
-  const list = users[activeCard].tx.slice(-5).map(e=>`${e.time} : ₹${e.amt}`).join("\\n");
-  document.getElementById('output').innerText = list || "No transactions";
-  speak("Last transactions displayed");
-  resetIdle();
-}
-
-function goBack(){
-  document.getElementById('withdrawDiv').classList.add('hidden');
-  document.getElementById('changeDiv').classList.add('hidden');
-  document.getElementById('menu').classList.remove('hidden');
-  document.getElementById('output').innerText = '';
-  resetIdle();
-}
-
-/************ ADMIN ****************/
-function startAdmin(){
-  const code = prompt("Enter admin code");
-  if(code==="admin"){
-    document.getElementById('adminPanel').style.display='block';
-    document.getElementById('menu').classList.add('hidden');
-    speak("Admin mode");
-  }
-}
-function refill(){
-  const amt = parseInt(document.getElementById('refillAmt').value);
-  users[activeCard].balance += amt;
-  saveUsers();
-  speak("Refilled");
-}
-function exitAdmin(){
-  document.getElementById('adminPanel').style.display='none';
-  document.getElementById('menu').classList.remove('hidden');
-}
-
-/************ CONTRAST MODE ****************/
-function toggleContrast(){
-  document.body.classList.toggle('contrast');
-}
-
-/************ SPEECH RECOGNITION ****************/
-function startSpeechRecognition(){
-  if(!('webkitSpeechRecognition' in window)) return;
-  const rec = new webkitSpeechRecognition();
-  rec.lang='en-IN';
-  rec.onresult=(e)=>{
-      const s = e.results[0][0].transcript.toLowerCase();
-      if(s.includes('withdraw')){
-        const n = parseInt(s.replace(/\\D/g,''));
-        document.getElementById('amount').value = n;
+    document.addEventListener("keydown", (e) => {
+      if (currentStep === "welcome" && e.key === "Enter") {
+        currentStep = "enterCard";
+        showMessage("Please enter your card number and press Enter.");
+      } else if (currentStep === "welcome" && e.key.toLowerCase() === "n") {
+        currentStep = "newCardNumber";
+        showMessage("Enter a new card number to register.");
       }
-  };
-  rec.start();
-}
+    });
 
-/************ PDF RECEIPT ****************/
-function generatePDF(amt){
-  const doc = new jsPDF();
-  doc.text(`Braille ATM\nCard: ${activeCard}\nWithdraw: ₹${amt}\nBalance: ₹${users[activeCard].balance}\nTime: ${new Date().toLocaleString()}`, 10,10);
-  doc.save('receipt.pdf');
-}
-/************ DANGER + CAMERA ***************/
-function showDanger() {
-  if (dangerTriggered) return;
-  dangerTriggered = true;
+    let input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Enter here and press Enter";
+    document.body.appendChild(input);
+    input.focus();
 
-  document.getElementById('dangerAlert').style.display = 'flex';
-  const beep = document.getElementById('beep');
-  beep.loop = true;
-  beep.play().catch(()=>{});
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const value = input.value.trim();
 
-  speak('Danger. Suspicious activity detected');
+        // Create new card
+        if (currentStep === "newCardNumber") {
+          if (cards[value]) {
+            showMessage("Card already exists. Try a different number.");
+          } else {
+            cards[value] = { pin: null, balance: 0 };
+            currentStep = "newCardPin";
+            showMessage("Enter a 4-digit PIN for your new card.");
+          }
+        } else if (currentStep === "newCardPin") {
+          if (value.length === 4) {
+            cards[Object.keys(cards).pop()].pin = value;
+            saveCards();
+            currentStep = "welcome";
+            showMessage("Card registered successfully. Press Enter to start.");
+          } else {
+            showMessage("PIN must be 4 digits. Try again.");
+          }
+        }
 
-  // take screenshot
-  captureImage();
-}
+        // Existing card login
+        else if (currentStep === "enterCard") {
+          if (cards[value]) {
+            currentStep = "enterPin";
+            input.dataset.card = value;
+            showMessage("Card found. Please enter your PIN.");
+          } else {
+            showMessage("Card not found. Press N to create a new card.");
+          }
+        } else if (currentStep === "enterPin") {
+          const card = input.dataset.card;
+          if (cards[card].pin === value) {
+            currentStep = "menu";
+            showMessage("Access granted. Press 1 to check balance or 2 to withdraw.");
+          } else {
+            showMessage("Incorrect PIN. Try again.");
+          }
+        } else if (currentStep === "menu") {
+          if (value === "1") {
+            showMessage("Your current balance is zero. Press Escape to return.");
+          } else if (value === "2") {
+            showMessage("Withdrawal unavailable in demo. Press Escape to return.");
+          }
+        }
 
-function captureImage(){
-  const video = document.getElementById('camera');
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  const imgData = canvas.toDataURL('image/png');
+        input.value = "";
+      }
 
-  // store in localStorage (or send to server)
-  let shots = JSON.parse(localStorage.getItem('capturedShots')||'[]');
-  shots.push({card:activeCard, time:new Date().toLocaleString(), data:imgData});
-  localStorage.setItem('capturedShots',JSON.stringify(shots));
-}
+      if (e.key === "Escape") {
+        currentStep = "welcome";
+        showMessage("Returning to welcome screen. Press Enter to start.");
+      }
+    });
 
-/************ CAMERA MONITOR (face + obstruction) ***************/
-navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
-   const video=document.getElementById('camera');
-   video.srcObject = stream;
+    // Block mouse completely
+    document.addEventListener("mousedown", (e) => e.preventDefault());
+    document.addEventListener("contextmenu", (e) => e.preventDefault());
 
-   const faceDetector =  ('FaceDetector' in window) ? new FaceDetector() : null;
-   const canvas = document.createElement('canvas');
-   const ctx = canvas.getContext('2d');
-
-   setInterval(async ()=>{
-     resetIdle();
-     if(!video.videoWidth) return;
-
-     canvas.width = video.videoWidth;
-     canvas.height = video.videoHeight;
-     ctx.drawImage(video,0,0);
-
-     // check brightness:
-     const frame = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-     let dark=0;
-     for(let i=0;i<frame.length;i+=4){
-       const b=(frame[i]+frame[i+1]+frame[i+2])/3;
-       if(b<30) dark++;
-     }
-     if((dark/(frame.length/4))>0.9){ showDanger(); return;}
-
-     // check face count:
-     if(faceDetector){
-       try{
-         const faces = await faceDetector.detect(video);
-         if(faces.length>1) showDanger();
-       }catch(e){}
-     }
-
-   },500); // <= every 500ms
-}).catch(()=>{
-   speak('Camera access denied. Security disabled.');
-});
-
-/************ RESET TO LOGIN ***************/
-function showPINScreen(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('withdrawDiv').classList.add('hidden');
-  document.getElementById('changeDiv').classList.add('hidden');
-  document.getElementById('adminPanel').style.display='none';
-  document.getElementById('pinLogin').classList.add('hidden');
-  document.getElementById('cardLogin').classList.remove('hidden');
-  document.getElementById('output').innerText='';
-  dangerTriggered=false;
-  speechSynthesis.cancel();
-}
-
-/************ START MESSAGE ****************/
-speak('Welcome to Braille Bank. Please enter card number.');
-resetIdle();
-
-</script>
-
-<!-- pdf library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    // AI Welcome voice
+    window.onload = () => {
+      showMessage("Welcome to the AI Voice-Assisted Braille ATM. Press Enter to begin or N to create a new card.");
+    };
+  </script>
 </body>
 </html>
-
