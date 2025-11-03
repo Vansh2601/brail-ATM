@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -31,73 +31,61 @@
     <source src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" type="audio/mpeg">
   </audio>
 
-  <div id="dangerAlert">⚠️ खतरा: संदिग्ध गतिविधि पाई गई</div>
+  <div id="dangerAlert">⚠️ DANGER: Suspicious Activity Detected</div>
   <video id="camera" autoplay muted playsinline></video>
 
-  <h1>ब्रेल बैंक एटीएम</h1>
+  <h1>Braille Bank ATM</h1>
 
   <!-- CARD LOGIN -->
   <div id="cardLogin">
-    <input type="text" id="cardNo" placeholder="कार्ड नंबर दर्ज करें"/>
-    <button onclick="enterCard()">जारी रखें</button>
-    <br/>
-    <button onclick="showRegister()">नया कार्ड पंजीकृत करें</button>
-  </div>
-
-  <!-- REGISTER NEW CARD -->
-  <div id="registerDiv" class="hidden">
-    <h3>नया कार्ड पंजीकरण</h3>
-    <input type="text" id="newCard" placeholder="नया कार्ड नंबर"/>
-    <input type="password" id="newPinReg" placeholder="नया पिन (4 अंक)" maxlength="4"/>
-    <input type="number" id="initialAmt" placeholder="प्रारंभिक जमा राशि"/>
-    <button onclick="registerCard()">पंजीकरण करें</button>
-    <button onclick="cancelRegister()">वापस</button>
+    <input type="text" id="cardNo" placeholder="Card Number"/>
+    <button onclick="enterCard()">Continue</button>
   </div>
 
   <!-- PIN LOGIN -->
   <div id="pinLogin" class="hidden">
-    <input type="password" id="pin" placeholder="पिन दर्ज करें" maxlength="4"/>
-    <button onclick="verifyPIN()">पिन सत्यापित करें</button>
+    <input type="password" id="pin" placeholder="PIN" maxlength="4"/>
+    <button onclick="verifyPIN()">Verify PIN</button>
   </div>
 
   <!-- ATM MENU -->
   <div id="menu" class="hidden">
-    <button onclick="withdrawUI()">निकासी</button>
-    <button onclick="changePinUI()">पिन बदलें</button>
-    <button onclick="showHistory()">लेन-देन इतिहास</button>
-    <button onclick="toggleContrast()">कॉन्ट्रास्ट मोड</button>
-    <button onclick="startAdmin()">एडमिन</button>
+    <button onclick="withdrawUI()">Withdraw</button>
+    <button onclick="changePinUI()">Change PIN</button>
+    <button onclick="showHistory()">Transactions</button>
+    <button onclick="toggleContrast()">Toggle Contrast</button>
+    <button onclick="startAdmin()">Admin</button>
   </div>
 
   <!-- WITHDRAW -->
   <div id="withdrawDiv" class="hidden">
-    <input type="number" id="amount" placeholder="निकासी राशि दर्ज करें"/>
-    <button onclick="withdraw()">पुष्टि करें</button>
-    <button onclick="goBack()">वापस</button>
+    <input type="number" id="amount" placeholder="Withdraw Amount"/>
+    <button onclick="withdraw()">Confirm</button>
+    <button onclick="goBack()">Back</button>
   </div>
 
   <!-- CHANGE PIN -->
   <div id="changeDiv" class="hidden">
-    <input type="password" id="newPin" placeholder="नया पिन दर्ज करें" maxlength="4"/>
-    <button onclick="changePin()">पुष्टि करें</button>
-    <button onclick="goBack()">वापस</button>
+    <input type="password" id="newPin" placeholder="New PIN" maxlength="4"/>
+    <button onclick="changePin()">Confirm Change</button>
+    <button onclick="goBack()">Back</button>
   </div>
 
   <!-- ADMIN PANEL -->
   <div id="adminPanel">
-    <h3>एडमिन मोड</h3>
-    <input type="number" id="refillAmt" placeholder="यूज़र के खाते में राशि जोड़ें"/>
-    <button onclick="refill()">राशि जोड़ें</button>
-    <button onclick="exitAdmin()">एडमिन से बाहर निकलें</button>
+    <h3>Admin Mode</h3>
+    <input type="number" id="refillAmt" placeholder="Add cash to current user"/>
+    <button onclick="refill()">Refill</button>
+    <button onclick="exitAdmin()">Exit Admin</button>
   </div>
 
   <pre id="output"></pre>
 
   <script>
-/************ डेटा + उपयोगी फंक्शन ****************/
+/************ DATA + UTILITIES ****************/
 const users = JSON.parse(localStorage.getItem('BrailleATM_users')) || {
   "0001": { pin: "9770", balance: 100000, tx: [] },
-  "0002": { pin: "2222", balance: 50000, tx: [] }
+  "0002": { pin: "2222", balance: 50000,  tx: [] }
 };
 let activeCard = "";
 const maxDaily = 50000;
@@ -106,6 +94,7 @@ let lastReset = localStorage.getItem('lastReset');
 let idleTimer;
 let dangerTriggered = false;
 
+// reset daily limit every 24h :
 if(!lastReset || (Date.now() - lastReset) > 86400000){
   dailyUsed = 0;
   localStorage.setItem("dailyUsed","0");
@@ -115,100 +104,63 @@ if(!lastReset || (Date.now() - lastReset) > 86400000){
 function saveUsers(){ localStorage.setItem('BrailleATM_users', JSON.stringify(users)); }
 
 function speak(text){
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "hi-IN";
-  u.pitch = 1.0;
-  u.rate = 0.9;
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang="en-IN"; u.pitch=1.1; u.rate=0.9;
   speechSynthesis.speak(u);
 }
 
 function resetIdle(){
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(()=>{ showPINScreen() },40000);
+  idleTimer = setTimeout(()=>{ showPINScreen() },30000); //30s logout
 }
 
-/************ कार्ड लॉगिन ****************/
+/************ LOGIN ****************/
 function enterCard(){
   const card = document.getElementById('cardNo').value.trim();
-  if(!users[card]){ speak("अज्ञात कार्ड। कृपया सही कार्ड नंबर दर्ज करें या नया कार्ड बनाएं।"); return; }
+  if(!users[card]){ alert("Unknown Card"); return; }
   activeCard = card;
   document.getElementById('cardLogin').classList.add('hidden');
   document.getElementById('pinLogin').classList.remove('hidden');
-  speak("कृपया कार्ड " + card + " के लिए पिन दर्ज करें।");
+  speak("Enter the PIN for card "+card);
   resetIdle();
 }
 
-/************ नया कार्ड पंजीकरण ****************/
-function showRegister(){
-  document.getElementById('cardLogin').classList.add('hidden');
-  document.getElementById('registerDiv').classList.remove('hidden');
-  speak("नया कार्ड पंजीकृत करें। कार्ड नंबर, चार अंकों का पिन और जमा राशि दर्ज करें।");
-}
-
-function registerCard(){
-  const newCard = document.getElementById('newCard').value.trim();
-  const newPin = document.getElementById('newPinReg').value.trim();
-  const initAmt = parseInt(document.getElementById('initialAmt').value);
-
-  if(!newCard || users[newCard]){
-    speak("यह कार्ड नंबर पहले से मौजूद है या अमान्य है।");
-    return;
-  }
-  if(!/^[0-9]{4}$/.test(newPin)){
-    speak("पिन चार अंकों का होना चाहिए।");
-    return;
-  }
-  if(isNaN(initAmt) || initAmt < 0){
-    speak("कृपया वैध राशि दर्ज करें।");
-    return;
-  }
-
-  users[newCard] = { pin: newPin, balance: initAmt, tx: [] };
-  saveUsers();
-  speak("नया कार्ड सफलतापूर्वक पंजीकृत कर दिया गया है। आपका कार्ड नंबर है " + newCard);
-  cancelRegister();
-}
-
-function cancelRegister(){
-  document.getElementById('registerDiv').classList.add('hidden');
-  document.getElementById('cardLogin').classList.remove('hidden');
-}
-
-/************ पिन सत्यापन ****************/
 function verifyPIN(){
   const p = document.getElementById('pin').value;
   if(p === users[activeCard].pin){
     document.getElementById('pinLogin').classList.add('hidden');
     document.getElementById('menu').classList.remove('hidden');
-    speak("पिन सही है। कृपया कोई विकल्प चुनें।");
+    speak("PIN correct. Choose an option.");
   }else{
-    speak("गलत पिन दर्ज किया गया है।");
+    speak("Incorrect PIN");
     showDanger();
   }
   resetIdle();
 }
 
-/************ निकासी, पिन बदलना, इतिहास ****************/
+/************ MENU ACTIONS ****************/
 function withdrawUI(){
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('withdrawDiv').classList.remove('hidden');
-  speak("कृपया निकासी राशि दर्ज करें या बोलें।");
+  speak("Enter amount to withdraw or say the amount.");
+  // speech recognition
   startSpeechRecognition();
   resetIdle();
 }
 
 function withdraw(){
   const amt = parseInt(document.getElementById('amount').value);
-  if(isNaN(amt)){ speak("अमान्य राशि"); return;}
-  if(amt > users[activeCard].balance){ speak("पर्याप्त राशि नहीं है।"); return;}
-  if(dailyUsed + amt > maxDaily){ speak("दैनिक सीमा पार हो गई है।"); return;}
+  if(isNaN(amt)){ speak("Invalid amount"); return;}
+  if(amt > users[activeCard].balance){ speak("Insufficient funds"); return;}
+  if(dailyUsed + amt > maxDaily){ speak("Daily limit exceeded"); return;}
   users[activeCard].balance -= amt;
   users[activeCard].tx.push({time: new Date().toLocaleString(), amt});
   dailyUsed += amt;
   saveUsers();
   localStorage.setItem("dailyUsed", dailyUsed);
+  // PDF receipt
   generatePDF(amt);
-  speak("लेन-देन सफल रहा। शेष राशि है " + users[activeCard].balance + " रुपये।");
+  speak("Transaction successful. Your new balance is " + users[activeCard].balance);
   goBack();
   resetIdle();
 }
@@ -216,24 +168,24 @@ function withdraw(){
 function changePinUI(){
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('changeDiv').classList.remove('hidden');
-  speak("नया पिन दर्ज करें।");
+  speak("Enter new PIN");
   resetIdle();
 }
 
 function changePin(){
   const np = document.getElementById('newPin').value;
-  if(!/^[0-9]{4}$/.test(np)){ speak("पिन चार अंकों का होना चाहिए।"); return;}
+  if(!/^[0-9]{4}$/.test(np)){ speak("PIN must be 4 digits"); return;}
   users[activeCard].pin = np;
   saveUsers();
-  speak("पिन सफलतापूर्वक बदल दिया गया है।");
+  speak("PIN changed successfully");
   goBack();
   resetIdle();
 }
 
 function showHistory(){
-  const list = users[activeCard].tx.slice(-5).map(e=>`${e.time} : ₹${e.amt}`).join("\n");
-  document.getElementById('output').innerText = list || "कोई लेन-देन नहीं मिला।";
-  speak("आपके हाल के लेन-देन दिखाए जा रहे हैं।");
+  const list = users[activeCard].tx.slice(-5).map(e=>`${e.time} : ₹${e.amt}`).join("\\n");
+  document.getElementById('output').innerText = list || "No transactions";
+  speak("Last transactions displayed");
   resetIdle();
 }
 
@@ -245,49 +197,53 @@ function goBack(){
   resetIdle();
 }
 
-/************ एडमिन ************/
+/************ ADMIN ****************/
 function startAdmin(){
-  const code = prompt("एडमिन कोड दर्ज करें");
+  const code = prompt("Enter admin code");
   if(code==="admin"){
     document.getElementById('adminPanel').style.display='block';
     document.getElementById('menu').classList.add('hidden');
-    speak("एडमिन मोड चालू किया गया है।");
+    speak("Admin mode");
   }
 }
 function refill(){
   const amt = parseInt(document.getElementById('refillAmt').value);
   users[activeCard].balance += amt;
   saveUsers();
-  speak("राशि जोड़ दी गई है।");
+  speak("Refilled");
 }
 function exitAdmin(){
   document.getElementById('adminPanel').style.display='none';
   document.getElementById('menu').classList.remove('hidden');
 }
 
-/************ स्पीच रिकग्निशन ************/
+/************ CONTRAST MODE ****************/
+function toggleContrast(){
+  document.body.classList.toggle('contrast');
+}
+
+/************ SPEECH RECOGNITION ****************/
 function startSpeechRecognition(){
   if(!('webkitSpeechRecognition' in window)) return;
   const rec = new webkitSpeechRecognition();
-  rec.lang='hi-IN';
+  rec.lang='en-IN';
   rec.onresult=(e)=>{
       const s = e.results[0][0].transcript.toLowerCase();
-      if(s.includes('निकासी')){
-        const n = parseInt(s.replace(/\D/g,''));
+      if(s.includes('withdraw')){
+        const n = parseInt(s.replace(/\\D/g,''));
         document.getElementById('amount').value = n;
       }
   };
   rec.start();
 }
 
-/************ PDF रसीद ************/
+/************ PDF RECEIPT ****************/
 function generatePDF(amt){
   const doc = new jsPDF();
-  doc.text(`ब्रेल एटीएम\nकार्ड: ${activeCard}\nनिकासी: ₹${amt}\nशेष राशि: ₹${users[activeCard].balance}\nसमय: ${new Date().toLocaleString()}`, 10,10);
+  doc.text(`Braille ATM\nCard: ${activeCard}\nWithdraw: ₹${amt}\nBalance: ₹${users[activeCard].balance}\nTime: ${new Date().toLocaleString()}`, 10,10);
   doc.save('receipt.pdf');
 }
-
-/************ सुरक्षा कैमरा ************/
+/************ DANGER + CAMERA ***************/
 function showDanger() {
   if (dangerTriggered) return;
   dangerTriggered = true;
@@ -297,8 +253,9 @@ function showDanger() {
   beep.loop = true;
   beep.play().catch(()=>{});
 
-  speak('सावधान! संदिग्ध गतिविधि पाई गई है।');
+  speak('Danger. Suspicious activity detected');
 
+  // take screenshot
   captureImage();
 }
 
@@ -309,23 +266,31 @@ function captureImage(){
   canvas.height = video.videoHeight;
   canvas.getContext('2d').drawImage(video,0,0);
   const imgData = canvas.toDataURL('image/png');
+
+  // store in localStorage (or send to server)
   let shots = JSON.parse(localStorage.getItem('capturedShots')||'[]');
   shots.push({card:activeCard, time:new Date().toLocaleString(), data:imgData});
   localStorage.setItem('capturedShots',JSON.stringify(shots));
 }
 
+/************ CAMERA MONITOR (face + obstruction) ***************/
 navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
    const video=document.getElementById('camera');
    video.srcObject = stream;
+
    const faceDetector =  ('FaceDetector' in window) ? new FaceDetector() : null;
    const canvas = document.createElement('canvas');
    const ctx = canvas.getContext('2d');
+
    setInterval(async ()=>{
      resetIdle();
      if(!video.videoWidth) return;
+
      canvas.width = video.videoWidth;
      canvas.height = video.videoHeight;
      ctx.drawImage(video,0,0);
+
+     // check brightness:
      const frame = ctx.getImageData(0,0,canvas.width,canvas.height).data;
      let dark=0;
      for(let i=0;i<frame.length;i+=4){
@@ -333,18 +298,21 @@ navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
        if(b<30) dark++;
      }
      if((dark/(frame.length/4))>0.9){ showDanger(); return;}
+
+     // check face count:
      if(faceDetector){
        try{
          const faces = await faceDetector.detect(video);
          if(faces.length>1) showDanger();
        }catch(e){}
      }
-   },500);
+
+   },500); // <= every 500ms
 }).catch(()=>{
-   speak('कैमरा एक्सेस अस्वीकृत। सुरक्षा बंद कर दी गई है।');
+   speak('Camera access denied. Security disabled.');
 });
 
-/************ लॉगआउट ************/
+/************ RESET TO LOGIN ***************/
 function showPINScreen(){
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('withdrawDiv').classList.add('hidden');
@@ -357,12 +325,13 @@ function showPINScreen(){
   speechSynthesis.cancel();
 }
 
-/************ प्रारंभिक संदेश ************/
-speak('ब्रेल बैंक में आपका स्वागत है। कृपया कार्ड नंबर दर्ज करें या नया कार्ड पंजीकृत करें।');
+/************ START MESSAGE ****************/
+speak('Welcome to Braille Bank. Please enter card number.');
 resetIdle();
 
 </script>
 
+<!-- pdf library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>
