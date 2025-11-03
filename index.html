@@ -66,15 +66,7 @@
     <button onclick="goBack()">वापस जाएं</button>
   </div>
 
-  <!-- ADMIN PANEL -->
-  <div id="adminPanel">
-    <h3>एडमिन मोड</h3>
-    <input type="number" id="refillAmt" placeholder="राशि जोड़ें"/>
-    <button onclick="refill()">रीफिल करें</button>
-    <button onclick="exitAdmin()">बाहर निकलें</button>
-  </div>
 
-  <pre id="output"></pre>
 
   <script>
 /************ डेटा और उपयोगी फंक्शन ****************/
@@ -141,7 +133,38 @@ function withdrawUI(){
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('withdrawDiv').classList.remove('hidden');
   speak("निकासी राशि दर्ज करें या बोलें।");
-  startSpeechRecognition();
+  function startSpeechRecognition(){
+  if(!('webkitSpeechRecognition' in window)){
+    alert("Speech recognition not supported in this browser");
+    return;
+  }
+  const rec = new webkitSpeechRecognition();
+  rec.lang = 'hi-IN'; // 👈 Hindi recognition
+  rec.continuous = true; // Keep listening
+  rec.interimResults = false;
+
+  speak("कृपया राशि बोलिए जिसे आप निकालना चाहते हैं।");
+
+  rec.onresult = (e) => {
+    const s = e.results[e.results.length - 1][0].transcript.toLowerCase();
+    console.log("Heard:", s);
+    const n = parseInt(s.replace(/\D/g, ''));
+    if(!isNaN(n)){
+      document.getElementById('amount').value = n;
+      speak(`आपने ${n} रुपये कहे हैं। पुष्टि करने के लिए कन्फर्म दबाएं।`);
+    } else {
+      speak("कृपया स्पष्ट रूप से राशि बोलिए।");
+    }
+  };
+
+  rec.onerror = (err) => {
+    console.error("Speech error:", err);
+    speak("वॉइस इनपुट में त्रुटि हुई। कृपया दोबारा प्रयास करें।");
+  };
+
+  rec.start();
+}
+;
   resetIdle();
 }
 
@@ -193,31 +216,6 @@ function goBack(){
   document.getElementById('menu').classList.remove('hidden');
   document.getElementById('output').innerText = '';
   resetIdle();
-}
-
-/************ एडमिन ****************/
-function startAdmin(){
-  const code = prompt("एडमिन कोड दर्ज करें");
-  if(code==="admin"){
-    document.getElementById('adminPanel').style.display='block';
-    document.getElementById('menu').classList.add('hidden');
-    speak("एडमिन मोड सक्रिय है");
-  }
-}
-function refill(){
-  const amt = parseInt(document.getElementById('refillAmt').value);
-  users[activeCard].balance += amt;
-  saveUsers();
-  speak("राशि जोड़ दी गई है");
-}
-function exitAdmin(){
-  document.getElementById('adminPanel').style.display='none';
-  document.getElementById('menu').classList.remove('hidden');
-}
-
-/************ कंट्रास्ट मोड ****************/
-function toggleContrast(){
-  document.body.classList.toggle('contrast');
 }
 
 /************ स्पीच रिकग्निशन ****************/
@@ -317,4 +315,5 @@ resetIdle();
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>
+
 
