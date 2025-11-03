@@ -5,15 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Braille ATM</title>
 
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js');
+    }
+  </script>
+
   <style>
-    body {font-family:sans-serif; background:#111; color:#0f0; text-align:center; padding:20px;}
+    body {font-family: sans-serif; background:#111; color:#0f0; text-align:center; position:relative; padding:20px;}
     input, button {padding:10px;margin:8px;font-size:1rem;}
     .hidden {display:none;}
     #dangerAlert{
       background:red;color:white;position:fixed;top:0;left:0;width:100%;height:100%;
       display:none;align-items:center;justify-content:center;z-index:9999;font-size:2rem;
     }
+    #adminPanel{ display:none; border:1px solid #0f0; padding:15px; margin-top:10px; }
     video{position:absolute;top:10px;right:10px;width:100px;border:2px solid #fff;}
+    .contrast{ background:#000; color:yellow; }
   </style>
 </head>
 <body>
@@ -55,6 +65,8 @@
     <button onclick="withdrawUI()">निकासी</button>
     <button onclick="changePinUI()">पिन बदलें</button>
     <button onclick="showHistory()">लेन-देन इतिहास</button>
+    <button onclick="toggleContrast()">कॉन्ट्रास्ट मोड</button>
+    <button onclick="startAdmin()">एडमिन</button>
   </div>
 
   <!-- WITHDRAW -->
@@ -69,6 +81,14 @@
     <input type="password" id="newPin" placeholder="नया पिन दर्ज करें" maxlength="4"/>
     <button onclick="changePin()">पुष्टि करें</button>
     <button onclick="goBack()">वापस</button>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="adminPanel">
+    <h3>एडमिन मोड</h3>
+    <input type="number" id="refillAmt" placeholder="यूज़र के खाते में राशि जोड़ें"/>
+    <button onclick="refill()">राशि जोड़ें</button>
+    <button onclick="exitAdmin()">एडमिन से बाहर निकलें</button>
   </div>
 
   <pre id="output"></pre>
@@ -130,4 +150,219 @@ function registerCard(){
   const newPin = document.getElementById('newPinReg').value.trim();
   const initAmt = parseInt(document.getElementById('initialAmt').value);
 
-  if(!newCard || users[new]()
+  if(!newCard || users[newCard]){
+    speak("यह कार्ड नंबर पहले से मौजूद है या अमान्य है।");
+    return;
+  }
+  if(!/^[0-9]{4}$/.test(newPin)){
+    speak("पिन चार अंकों का होना चाहिए।");
+    return;
+  }
+  if(isNaN(initAmt) || initAmt < 0){
+    speak("कृपया वैध राशि दर्ज करें।");
+    return;
+  }
+
+  users[newCard] = { pin: newPin, balance: initAmt, tx: [] };
+  saveUsers();
+  speak("नया कार्ड सफलतापूर्वक पंजीकृत कर दिया गया है। आपका कार्ड नंबर है " + newCard);
+  cancelRegister();
+}
+
+function cancelRegister(){
+  document.getElementById('registerDiv').classList.add('hidden');
+  document.getElementById('cardLogin').classList.remove('hidden');
+}
+
+/************ पिन सत्यापन ****************/
+function verifyPIN(){
+  const p = document.getElementById('pin').value;
+  if(p === users[activeCard].pin){
+    document.getElementById('pinLogin').classList.add('hidden');
+    document.getElementById('menu').classList.remove('hidden');
+    speak("पिन सही है। कृपया कोई विकल्प चुनें।");
+  }else{
+    speak("गलत पिन दर्ज किया गया है।");
+    showDanger();
+  }
+  resetIdle();
+}
+
+/************ निकासी, पिन बदलना, इतिहास ****************/
+function withdrawUI(){
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('withdrawDiv').classList.remove('hidden');
+  speak("कृपया निकासी राशि दर्ज करें या बोलें।");
+  startSpeechRecognition();
+  resetIdle();
+}
+
+function withdraw(){
+  const amt = parseInt(document.getElementById('amount').value);
+  if(isNaN(amt)){ speak("अमान्य राशि"); return;}
+  if(amt > users[activeCard].balance){ speak("पर्याप्त राशि नहीं है।"); return;}
+  if(dailyUsed + amt > maxDaily){ speak("दैनिक सीमा पार हो गई है।"); return;}
+  users[activeCard].balance -= amt;
+  users[activeCard].tx.push({time: new Date().toLocaleString(), amt});
+  dailyUsed += amt;
+  saveUsers();
+  localStorage.setItem("dailyUsed", dailyUsed);
+  generatePDF(amt);
+  speak("लेन-देन सफल रहा। शेष राशि है " + users[activeCard].balance + " रुपये।");
+  goBack();
+  resetIdle();
+}
+
+function changePinUI(){
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('changeDiv').classList.remove('hidden');
+  speak("नया पिन दर्ज करें।");
+  resetIdle();
+}
+
+function changePin(){
+  const np = document.getElementById('newPin').value;
+  if(!/^[0-9]{4}$/.test(np)){ speak("पिन चार अंकों का होना चाहिए।"); return;}
+  users[activeCard].pin = np;
+  saveUsers();
+  speak("पिन सफलतापूर्वक बदल दिया गया है।");
+  goBack();
+  resetIdle();
+}
+
+function showHistory(){
+  const list = users[activeCard].tx.slice(-5).map(e=>`${e.time} : ₹${e.amt}`).join("\n");
+  document.getElementById('output').innerText = list || "कोई लेन-देन नहीं मिला।";
+  speak("आपके हाल के लेन-देन दिखाए जा रहे हैं।");
+  resetIdle();
+}
+
+function goBack(){
+  document.getElementById('withdrawDiv').classList.add('hidden');
+  document.getElementById('changeDiv').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('output').innerText = '';
+  resetIdle();
+}
+
+/************ एडमिन ************/
+function startAdmin(){
+  const code = prompt("एडमिन कोड दर्ज करें");
+  if(code==="admin"){
+    document.getElementById('adminPanel').style.display='block';
+    document.getElementById('menu').classList.add('hidden');
+    speak("एडमिन मोड चालू किया गया है।");
+  }
+}
+function refill(){
+  const amt = parseInt(document.getElementById('refillAmt').value);
+  users[activeCard].balance += amt;
+  saveUsers();
+  speak("राशि जोड़ दी गई है।");
+}
+function exitAdmin(){
+  document.getElementById('adminPanel').style.display='none';
+  document.getElementById('menu').classList.remove('hidden');
+}
+
+/************ स्पीच रिकग्निशन ************/
+function startSpeechRecognition(){
+  if(!('webkitSpeechRecognition' in window)) return;
+  const rec = new webkitSpeechRecognition();
+  rec.lang='hi-IN';
+  rec.onresult=(e)=>{
+      const s = e.results[0][0].transcript.toLowerCase();
+      if(s.includes('निकासी')){
+        const n = parseInt(s.replace(/\D/g,''));
+        document.getElementById('amount').value = n;
+      }
+  };
+  rec.start();
+}
+
+/************ PDF रसीद ************/
+function generatePDF(amt){
+  const doc = new jsPDF();
+  doc.text(`ब्रेल एटीएम\nकार्ड: ${activeCard}\nनिकासी: ₹${amt}\nशेष राशि: ₹${users[activeCard].balance}\nसमय: ${new Date().toLocaleString()}`, 10,10);
+  doc.save('receipt.pdf');
+}
+
+/************ सुरक्षा कैमरा ************/
+function showDanger() {
+  if (dangerTriggered) return;
+  dangerTriggered = true;
+
+  document.getElementById('dangerAlert').style.display = 'flex';
+  const beep = document.getElementById('beep');
+  beep.loop = true;
+  beep.play().catch(()=>{});
+
+  speak('सावधान! संदिग्ध गतिविधि पाई गई है।');
+
+  captureImage();
+}
+
+function captureImage(){
+  const video = document.getElementById('camera');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  const imgData = canvas.toDataURL('image/png');
+  let shots = JSON.parse(localStorage.getItem('capturedShots')||'[]');
+  shots.push({card:activeCard, time:new Date().toLocaleString(), data:imgData});
+  localStorage.setItem('capturedShots',JSON.stringify(shots));
+}
+
+navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
+   const video=document.getElementById('camera');
+   video.srcObject = stream;
+   const faceDetector =  ('FaceDetector' in window) ? new FaceDetector() : null;
+   const canvas = document.createElement('canvas');
+   const ctx = canvas.getContext('2d');
+   setInterval(async ()=>{
+     resetIdle();
+     if(!video.videoWidth) return;
+     canvas.width = video.videoWidth;
+     canvas.height = video.videoHeight;
+     ctx.drawImage(video,0,0);
+     const frame = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+     let dark=0;
+     for(let i=0;i<frame.length;i+=4){
+       const b=(frame[i]+frame[i+1]+frame[i+2])/3;
+       if(b<30) dark++;
+     }
+     if((dark/(frame.length/4))>0.9){ showDanger(); return;}
+     if(faceDetector){
+       try{
+         const faces = await faceDetector.detect(video);
+         if(faces.length>1) showDanger();
+       }catch(e){}
+     }
+   },500);
+}).catch(()=>{
+   speak('कैमरा एक्सेस अस्वीकृत। सुरक्षा बंद कर दी गई है।');
+});
+
+/************ लॉगआउट ************/
+function showPINScreen(){
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('withdrawDiv').classList.add('hidden');
+  document.getElementById('changeDiv').classList.add('hidden');
+  document.getElementById('adminPanel').style.display='none';
+  document.getElementById('pinLogin').classList.add('hidden');
+  document.getElementById('cardLogin').classList.remove('hidden');
+  document.getElementById('output').innerText='';
+  dangerTriggered=false;
+  speechSynthesis.cancel();
+}
+
+/************ प्रारंभिक संदेश ************/
+speak('ब्रेल बैंक में आपका स्वागत है। कृपया कार्ड नंबर दर्ज करें या नया कार्ड पंजीकृत करें।');
+resetIdle();
+
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</body>
+</html>
