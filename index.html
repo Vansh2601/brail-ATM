@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Braille ATM</title>
+  <title>ब्रेल बैंक एटीएम</title>
+
   <link rel="manifest" href="manifest.json" />
   <script>
     if ('serviceWorker' in navigator) {
@@ -12,298 +13,48 @@
   </script>
 
   <style>
-    body {font-family: sans-serif; background:#111; color:#0f0; text-align:center; position:relative; padding:20px;}
-    input, button {padding:10px;margin:8px;font-size:1rem;}
-    .hidden {display:none;}
-    #dangerAlert{
-      background:red;color:white;position:fixed;top:0;left:0;width:100%;height:100%;
-      display:none;align-items:center;justify-content:center;z-index:9999;font-size:2rem;
+    body {
+      font-family: sans-serif;
+      background: #111;
+      color: #0f0;
+      text-align: center;
+      position: relative;
+      padding: 20px;
     }
-    video{position:absolute;top:10px;right:10px;width:100px;border:2px solid #fff;}
-    .contrast{ background:#000; color:yellow; }
+    input, button {
+      padding: 10px;
+      margin: 8px;
+      font-size: 1rem;
+    }
+    .hidden { display: none; }
+    #dangerAlert {
+      background: red;
+      color: white;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      font-size: 2rem;
+    }
+    video {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 100px;
+      border: 2px solid #fff;
+    }
+    .contrast {
+      background: #000;
+      color: yellow;
+    }
   </style>
 </head>
+
 <body>
   <audio id="beep" preload="auto">
-    <source src="https://www.soundjay.com/buttons/sounds/beep-07.mp3" type="audio/mpeg">
-  </audio>
-
-  <div id="dangerAlert">⚠️ खतरा: संदिग्ध गतिविधि पाई गई</div>
-  <video id="camera" autoplay muted playsinline></video>
-
-  <h1>ब्रेल बैंक एटीएम</h1>
-
-  <!-- CARD LOGIN -->
-  <div id="cardLogin">
-    <input type="text" id="cardNo" placeholder="कार्ड नंबर"/>
-    <button onclick="enterCard()">आगे बढ़ें</button>
-  </div>
-
-  <!-- PIN LOGIN -->
-  <div id="pinLogin" class="hidden">
-    <input type="password" id="pin" placeholder="पिन दर्ज करें" maxlength="4"/>
-    <button onclick="verifyPIN()">सत्यापित करें</button>
-  </div>
-
-  <!-- ATM MENU -->
-  <div id="menu" class="hidden">
-    <button onclick="withdrawUI()">निकासी</button>
-    <button onclick="changePinUI()">पिन बदलें</button>
-    <button onclick="showHistory()">लेनदेन</button>
-    <button onclick="toggleContrast()">कॉन्ट्रास्ट बदलें</button>
-    <button onclick="startAdmin()">एडमिन</button>
-  </div>
-
-  <!-- WITHDRAW -->
-  <div id="withdrawDiv" class="hidden">
-    <input type="number" id="amount" placeholder="निकासी राशि"/>
-    <button onclick="withdraw()">पुष्टि करें</button>
-    <button onclick="goBack()">वापस जाएं</button>
-  </div>
-
-  <!-- CHANGE PIN -->
-  <div id="changeDiv" class="hidden">
-    <input type="password" id="newPin" placeholder="नया पिन" maxlength="4"/>
-    <button onclick="changePin()">पुष्टि करें</button>
-    <button onclick="goBack()">वापस जाएं</button>
-  </div>
-  <script>
-/************ डेटा और उपयोगी फंक्शन ****************/
-const users = JSON.parse(localStorage.getItem('BrailleATM_users')) || {
-  "0001": { pin: "9770", balance: 100000, tx: [] },
-  "0002": { pin: "2222", balance: 50000,  tx: [] }
-};
-let activeCard = "";
-const maxDaily = 50000;
-let dailyUsed = parseInt(localStorage.getItem('dailyUsed')||'0');
-let lastReset = localStorage.getItem('lastReset');
-let idleTimer;
-let dangerTriggered = false;
-
-// हर 24 घंटे में लिमिट रीसेट
-if(!lastReset || (Date.now() - lastReset) > 86400000){
-  dailyUsed = 0;
-  localStorage.setItem("dailyUsed","0");
-  localStorage.setItem("lastReset", Date.now());
-}
-
-function saveUsers(){ localStorage.setItem('BrailleATM_users', JSON.stringify(users)); }
-
-function speak(text){
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "hi-IN";
-  u.pitch = 1;
-  u.rate = 0.95;
-  speechSynthesis.speak(u);
-}
-
-function resetIdle(){
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(()=>{ showPINScreen() },30000);
-}
-
-/************ लॉगिन ****************/
-function enterCard(){
-  const card = document.getElementById('cardNo').value.trim();
-  if(!users[card]){ alert("अमान्य कार्ड नंबर"); return; }
-  activeCard = card;
-  document.getElementById('cardLogin').classList.add('hidden');
-  document.getElementById('pinLogin').classList.remove('hidden');
-  speak("कृपया पिन दर्ज करें");
-  resetIdle();
-}
-
-function verifyPIN(){
-  const p = document.getElementById('pin').value;
-  if(p === users[activeCard].pin){
-    document.getElementById('pinLogin').classList.add('hidden');
-    document.getElementById('menu').classList.remove('hidden');
-    speak("पिन सही है। कृपया विकल्प चुनें।");
-  }else{
-    speak("गलत पिन।");
-    showDanger();
-  }
-  resetIdle();
-}
-
-/************ मेनू एक्शन ****************/
-function withdrawUI(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('withdrawDiv').classList.remove('hidden');
-  speak("निकासी राशि दर्ज करें या बोलें।");
-  startSpeechRecognition();
-  resetIdle();
-}
-
-function withdraw(){
-  const amt = parseInt(document.getElementById('amount').value);
-  if(isNaN(amt)){ speak("अमान्य राशि"); return;}
-  if(amt > users[activeCard].balance){ speak("पर्याप्त राशि नहीं है"); return;}
-  if(dailyUsed + amt > maxDaily){ speak("दैनिक सीमा पूरी हो चुकी है"); return;}
-  users[activeCard].balance -= amt;
-  users[activeCard].tx.push({time: new Date().toLocaleString(), amt});
-  dailyUsed += amt;
-  saveUsers();
-  localStorage.setItem("dailyUsed", dailyUsed);
-
-  // PDF रसीद बनाएं और डाउनलोड करें
-  generatePDF(amt);
-  speak(`लेनदेन सफल रहा। आपकी नई शेष राशि है ₹${users[activeCard].balance}`);
-  goBack();
-  resetIdle();
-}
-
-function changePinUI(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('changeDiv').classList.remove('hidden');
-  speak("नया पिन दर्ज करें");
-  resetIdle();
-}
-
-function changePin(){
-  const np = document.getElementById('newPin').value;
-  if(!/^[0-9]{4}$/.test(np)){ speak("पिन 4 अंकों का होना चाहिए"); return;}
-  users[activeCard].pin = np;
-  saveUsers();
-  speak("पिन सफलतापूर्वक बदल दिया गया है");
-  goBack();
-  resetIdle();
-}
-
-function showHistory(){
-  const list = users[activeCard].tx.slice(-5).map(e=>`${e.time} : ₹${e.amt}`).join("\n");
-  document.getElementById('output').innerText = list || "कोई हालिया लेनदेन नहीं";
-  speak("आपके हालिया लेनदेन दिखाए गए हैं");
-  resetIdle();
-}
-
-function goBack(){
-  document.getElementById('withdrawDiv').classList.add('hidden');
-  document.getElementById('changeDiv').classList.add('hidden');
-  document.getElementById('menu').classList.remove('hidden');
-  document.getElementById('output').innerText = '';
-  resetIdle();
-}
-
-/************ एडमिन ****************/
-function startAdmin(){
-  const code = prompt("एडमिन कोड दर्ज करें");
-  if(code==="admin"){
-    document.getElementById('adminPanel').style.display='block';
-    document.getElementById('menu').classList.add('hidden');
-    speak("एडमिन मोड सक्रिय है");
-  }
-}
-function refill(){
-  const amt = parseInt(document.getElementById('refillAmt').value);
-  users[activeCard].balance += amt;
-  saveUsers();
-  speak("राशि जोड़ दी गई है");
-}
-function exitAdmin(){
-  document.getElementById('adminPanel').style.display='none';
-  document.getElementById('menu').classList.remove('hidden');
-}
-
-/************ कंट्रास्ट मोड ****************/
-function toggleContrast(){
-  document.body.classList.toggle('contrast');
-}
-
-/************ स्पीच रिकग्निशन ****************/
-function startSpeechRecognition(){
-  if(!('webkitSpeechRecognition' in window)) return;
-  const rec = new webkitSpeechRecognition();
-  rec.lang='hi-IN';
-  rec.onresult=(e)=>{
-      const s = e.results[0][0].transcript.toLowerCase();
-      const n = parseInt(s.replace(/\D/g,''));
-      if(!isNaN(n)) document.getElementById('amount').value = n;
-  };
-  rec.start();
-}
-
-/************ PDF रसीद ****************/
-function generatePDF(amt){
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  const text = `ब्रेल बैंक एटीएम रसीद\nकार्ड: ${activeCard}\nनिकासी: ₹${amt}\nशेष राशि: ₹${users[activeCard].balance}\nसमय: ${new Date().toLocaleString()}`;
-  doc.text(text, 10, 10);
-  doc.save(`ATM_Receipt_${Date.now()}.pdf`);
-}
-
-/************ डेंजर + कैमरा ****************/
-function showDanger() {
-  if (dangerTriggered) return;
-  dangerTriggered = true;
-  document.getElementById('dangerAlert').style.display = 'flex';
-  const beep = document.getElementById('beep');
-  beep.loop = true;
-  beep.play().catch(()=>{});
-  speak('खतरा। संदिग्ध गतिविधि पाई गई है।');
-  captureImage();
-}
-
-function captureImage(){
-  const video = document.getElementById('camera');
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  const imgData = canvas.toDataURL('image/png');
-  let shots = JSON.parse(localStorage.getItem('capturedShots')||'[]');
-  shots.push({card:activeCard, time:new Date().toLocaleString(), data:imgData});
-  localStorage.setItem('capturedShots',JSON.stringify(shots));
-}
-
-/************ कैमरा मॉनिटरिंग ****************/
-navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
-   const video=document.getElementById('camera');
-   video.srcObject = stream;
-   const faceDetector =  ('FaceDetector' in window) ? new FaceDetector() : null;
-   const canvas = document.createElement('canvas');
-   const ctx = canvas.getContext('2d');
-   setInterval(async ()=>{
-     resetIdle();
-     if(!video.videoWidth) return;
-     canvas.width = video.videoWidth;
-     canvas.height = video.videoHeight;
-     ctx.drawImage(video,0,0);
-     const frame = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-     let dark=0;
-     for(let i=0;i<frame.length;i+=4){
-       const b=(frame[i]+frame[i+1]+frame[i+2])/3;
-       if(b<30) dark++;
-     }
-     if((dark/(frame.length/4))>0.9){ showDanger(); return;}
-     if(faceDetector){
-       try{
-         const faces = await faceDetector.detect(video);
-         if(faces.length>1) showDanger();
-       }catch(e){}
-     }
-   },500);
-}).catch(()=>{
-   speak('कैमरा अनुमति अस्वीकृत। सुरक्षा निष्क्रिय है।');
-});
-
-/************ रीसेट ****************/
-function showPINScreen(){
-  document.getElementById('menu').classList.add('hidden');
-  document.getElementById('withdrawDiv').classList.add('hidden');
-  document.getElementById('changeDiv').classList.add('hidden');
-  document.getElementById('adminPanel').style.display='none';
-  document.getElementById('pinLogin').classList.add('hidden');
-  document.getElementById('cardLogin').classList.remove('hidden');
-  document.getElementById('output').innerText='';
-  dangerTriggered=false;
-  speechSynthesis.cancel();
-}
-
-speak('ब्रेल बैंक में आपका स्वागत है। कृपया कार्ड नंबर दर्ज करें।');
-resetIdle();
-
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-</body>
-</html>
+    <source src="https://www.soundjay.com/buttons/sounds/be
